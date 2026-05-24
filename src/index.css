@@ -1,0 +1,681 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-dark: #0e0f2e;
+  --bg-light: #2d3094;
+  --color-prompt-bg: #1c1f28;
+  --color-clip-bg: #272b34;
+  --color-border: #ec83bb;
+  --color-text-placeholder: rgba(202, 214, 232, 0.45);
+  --color-purple-glow: #3e2487;
+  --color-pink-glow: rgba(236, 131, 187, 0.6);
+}
+
+body, html, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+  color: #ffffff;
+  background-color: var(--bg-dark);
+}
+
+/* App Background Gradient */
+.app-viewport {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-light) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Menu Button - 1:1 Matching but reduced, flat, and non-responsive */
+.menu-btn {
+  position: absolute;
+  left: 32px;
+  top: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 110;
+  transition: opacity 0.2s ease;
+}
+
+.menu-btn:hover {
+  opacity: 0.7;
+}
+
+.menu-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Timer Widget - Top Right */
+.timer-widget {
+  position: absolute;
+  right: 50px; /* Aligns inner rect 70px from right edge */
+  top: -4px; /* Aligns inner rect 12px from top edge */
+  width: 155px;
+  height: 127px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  z-index: 110;
+  overflow: hidden;
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.timer-widget-bg {
+  position: absolute;
+  inset: 0;
+  width: 155px;
+  height: 127px;
+  pointer-events: none;
+}
+
+.timer-icon-group {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.timer-img-1 {
+  position: absolute;
+  width: 51.149px;
+  height: 56.832px;
+  left: 39.94px;
+  top: 32.17px;
+}
+
+.timer-img-3 {
+  position: absolute;
+  width: 18.565px;
+  height: 67.82px;
+  left: 94.5px;
+  top: 26.49px;
+  animation: pulseArrow 1.5s infinite ease-in-out;
+  transform-origin: bottom center;
+}
+
+/* Central Content Container (1:1 Layout) */
+.content-layout {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Main Title - 1:1 Centering Matching */
+.main-title {
+  position: absolute;
+  top: 350px; /* 1920x1080 Base */
+  left: 50%;
+  transform: translateX(-50%);
+  transform-origin: top center;
+  width: 794px;
+  height: 289px;
+  font-family: 'Inter', sans-serif;
+  font-size: 64px;
+  font-weight: 400;
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
+  line-height: normal;
+  word-break: break-word;
+  animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Scroll Container for content cards */
+.scroll-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 110px;
+  padding-bottom: 280px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  scroll-behavior: smooth;
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+/* Scrollbar styles */
+.scroll-container::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+.scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(236, 131, 187, 0.3);
+  border-radius: 4px;
+}
+.scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(236, 131, 187, 0.5);
+}
+
+/* Cards Layout - Centered matching Figma proportions */
+.cards-layout {
+  width: 100%;
+  max-width: 1073px;
+  display: flex;
+  flex-direction: column;
+  gap: 60px;
+  padding: 0 20px;
+}
+
+/* General Card Styles */
+.figma-card {
+  position: relative;
+  border: 1px solid #cad6e8;
+  border-radius: 20px;
+  box-shadow: 0px 4px 20px 0px rgba(91, 71, 188, 0.3);
+  padding: 40px;
+  overflow: hidden;
+  background: rgba(28, 31, 40, 0.2);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.figma-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0px 8px 30px 0px rgba(91, 71, 188, 0.5);
+}
+
+/* Card Texture Overlay */
+.card-texture {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  opacity: 0.3;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+}
+
+.card-title {
+  font-family: 'Poppins', sans-serif;
+  font-size: 36.805px;
+  font-weight: 400;
+  color: #ffffff;
+  position: relative;
+  z-index: 2;
+  word-break: break-word;
+}
+
+/* Specific Card Layout Dimensions */
+.full-card {
+  width: 100%;
+  height: 173px;
+}
+
+.card-row {
+  display: flex;
+  gap: 63px;
+  width: 100%;
+}
+
+.half-card {
+  flex: 1;
+  height: 254px;
+}
+
+/* Reveal Code Card */
+.reveal-card {
+  width: 100%;
+  min-height: 630px;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  padding: 50px 40px;
+}
+
+/* Reveal Button */
+.reveal-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 277.5px;
+  height: 97.5px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.reveal-btn:hover {
+  transform: scale(1.05);
+}
+
+.reveal-btn:active {
+  transform: scale(0.95);
+}
+
+.reveal-btn-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.reveal-btn-text {
+  font-family: 'Poppins', sans-serif;
+  font-size: 36.805px;
+  color: #76496c;
+  position: relative;
+  z-index: 2;
+}
+
+/* Reveal Code Content Block */
+.code-content-box {
+  width: 100%;
+  max-width: 850px;
+  height: 380px;
+  background: rgba(10, 11, 28, 0.85);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+  padding: 24px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 16px;
+  color: #a6e22e;
+  overflow-y: auto;
+  text-align: left;
+  line-height: 1.5;
+  animation: fadeIn 0.4s ease-out;
+  position: relative;
+  z-index: 5;
+}
+
+.code-keyword { color: #f92672; }
+.code-string { color: #e6db74; }
+.code-comment { color: #75715e; }
+.code-func { color: #66d9ef; }
+
+/* Fixed Prompt Bar (Unified positioning to prevent clipping in smaller vertical viewports) */
+.prompt-bar-wrapper {
+  position: absolute; /* Position absolute relative to content-layout (height: 100%) */
+  left: 50%;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  width: 940.248px;
+  height: 116.434px;
+  border-radius: 29.257px;
+  background: var(--color-prompt-bg);
+  box-shadow: 0px 0px 136.3px 0px var(--color-pink-glow);
+  filter: drop-shadow(0px 0px 48.98px var(--color-purple-glow));
+  transition: bottom 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  z-index: 100;
+}
+
+.prompt-bar-wrapper.welcome-mode {
+  bottom: 180px; /* Elevated in Welcome Mode to avoid bottom cutoffs */
+}
+
+.prompt-bar-wrapper.chat-mode {
+  bottom: 60px; /* Lowered in Chat Mode to maximize space for cards */
+}
+
+.prompt-bar-wrapper:focus-within {
+  transform: translateX(-50%) scale(1.015);
+  box-shadow: 0px 0px 150px 0px rgba(236, 131, 187, 0.8);
+}
+
+/* Search Bar (Inner layout and borders) */
+.prompt-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  padding: 13.115px 45.398px;
+  border: 4.035px solid var(--color-border);
+  border-radius: 29.257px;
+  gap: 16px;
+}
+
+/* Paperclip (File attachment button) */
+.clip-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  filter: none !important;
+  width: 70.619px;
+  height: 69.611px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+}
+
+.clip-btn:hover {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  transform: none;
+  opacity: 0.6;
+}
+
+.clip-btn img {
+  width: 48px;
+  height: 48px;
+  border: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* Prompt Left Info Group (Input field wrapper) */
+.prompt-left-group {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  margin-left: 20px;
+}
+
+/* Main Input Field */
+.prompt-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: 'Poppins', sans-serif;
+  font-size: 36.805px;
+  color: #ffffff;
+  caret-color: var(--color-border);
+}
+
+.prompt-input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+/* Send Button */
+.send-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 70.619px;
+  height: 69.611px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  flex-shrink: 0;
+}
+
+.send-btn:hover {
+  transform: scale(1.1) translateX(2px);
+}
+
+.send-btn:active {
+  transform: scale(0.95);
+}
+
+.send-btn img {
+  width: 100%;
+  height: 100%;
+}
+
+/* Keyframes animations */
+@keyframes pulseArrow {
+  0% { transform: translateY(0); }
+  55% { transform: translateY(-5px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes slideUpPrompt {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Responsive scaling to match different screen widths of desktop */
+@media (max-width: 1600px) {
+  .timer-widget {
+    right: 10px; /* 30px inner rect offset */
+  }
+  .cards-layout {
+    transform: scale(0.9);
+    transform-origin: top center;
+  }
+  .prompt-bar-wrapper {
+    transform: translateX(-50%) scale(0.9);
+  }
+  .prompt-bar-wrapper.welcome-mode {
+    bottom: 160px;
+  }
+  .prompt-bar-wrapper.chat-mode {
+    bottom: 50px;
+  }
+  .main-title {
+    transform: translateX(-50%) scale(0.9);
+    top: 300px;
+  }
+}
+
+@media (max-width: 1440px) {
+  .cards-layout {
+    transform: scale(0.8);
+    transform-origin: top center;
+  }
+  .prompt-bar-wrapper {
+    transform: translateX(-50%) scale(0.8);
+  }
+  .prompt-bar-wrapper.welcome-mode {
+    bottom: 140px;
+  }
+  .prompt-bar-wrapper.chat-mode {
+    bottom: 45px;
+  }
+  .main-title {
+    transform: translateX(-50%) scale(0.8);
+    top: 250px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .cards-layout {
+    transform: scale(0.65);
+    transform-origin: top center;
+    width: 95%;
+  }
+  .prompt-bar-wrapper {
+    transform: translateX(-50%) scale(0.65);
+    width: 90%;
+  }
+  .prompt-bar-wrapper.welcome-mode {
+    bottom: 120px;
+  }
+  .prompt-bar-wrapper.chat-mode {
+    bottom: 40px;
+  }
+  .main-title {
+    transform: translateX(-50%) scale(0.65);
+    top: 180px;
+    width: 90%;
+  }
+}
+
+@media (max-width: 768px) {
+  .menu-btn {
+    left: 20px;
+    top: 20px;
+    width: 32px;
+    height: 32px;
+  }
+  .timer-widget {
+    right: -10px;
+    top: -10px;
+    transform: scale(0.65);
+    transform-origin: top right;
+    width: 155px;
+    height: 127px;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+  }
+  .timer-img-1 {
+    width: 51.149px;
+    height: 56.832px;
+    left: 39.94px;
+    top: 32.17px;
+  }
+  .timer-img-3 {
+    width: 18.565px;
+    height: 67.82px;
+    left: 94.5px;
+    top: 26.49px;
+  }
+  
+  .scroll-container {
+    padding-top: 90px;
+    padding-bottom: 180px;
+  }
+  
+  .cards-layout {
+    transform: none;
+    gap: 30px;
+    width: 100%;
+  }
+
+  .figma-card {
+    padding: 20px;
+    border-radius: 12px;
+  }
+  
+  .card-title {
+    font-size: 20px;
+  }
+
+  .full-card {
+    height: 120px;
+  }
+  
+  .card-row {
+    flex-direction: column;
+    gap: 30px;
+  }
+
+  .half-card {
+    height: 150px;
+  }
+  
+  .reveal-card {
+    min-height: 400px;
+    padding: 20px;
+  }
+
+  .reveal-btn {
+    width: 180px;
+    height: 64px;
+  }
+  
+  .reveal-btn-text {
+    font-size: 22px;
+  }
+
+  .code-content-box {
+    font-size: 13px;
+    height: 240px;
+    padding: 12px;
+  }
+  
+  .prompt-bar-wrapper {
+    transform: translateX(-50%);
+    width: 92%;
+    height: 70px;
+    top: auto;
+    border-radius: 18px;
+    box-shadow: 0px 0px 50px 0px var(--color-pink-glow);
+  }
+  .prompt-bar-wrapper.welcome-mode {
+    bottom: 100px;
+  }
+  .prompt-bar-wrapper.chat-mode {
+    bottom: 30px;
+  }
+  
+  .prompt-bar {
+    padding: 6px 16px;
+    border-width: 2px;
+    border-radius: 18px;
+  }
+  
+  .clip-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+  }
+  
+  .clip-btn img {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .prompt-left-group {
+    gap: 12px;
+    margin-left: 10px;
+  }
+  
+  .prompt-input {
+    font-size: 18px;
+  }
+  
+  .send-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
