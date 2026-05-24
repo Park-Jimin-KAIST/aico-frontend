@@ -25,6 +25,16 @@ function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
 
+  // Structured Gemini output data state
+  const [cardData, setCardData] = useState({
+    description: "Please enter a prompt to generate documentation.",
+    arguments: "No parameters defined.",
+    returnValues: "No return values defined.",
+    todo: "Checklist is empty.",
+    tips: "No implementation tips available.",
+    code: "// Press Reveal Code after prompt generation completes"
+  });
+
   const scrollRef = useRef(null);
 
   // Auto-scroll to bottom when in chat mode
@@ -41,30 +51,64 @@ function App() {
     setInputValue("");
 
     if (viewMode === "welcome") {
-      // Transition from Welcome screen to Chat cards screen
       setViewMode("chat");
       setChatMessages([{ id: Date.now(), type: 'user', text: userText }]);
-      triggerAIReply();
+      triggerAIGeneration(userText);
     } else {
       setChatMessages(prev => [...prev, { id: Date.now(), type: 'user', text: userText }]);
-      triggerAIReply();
+      triggerAIGeneration(userText);
     }
   };
 
-  const triggerAIReply = () => {
+  const triggerAIGeneration = async (promptText) => {
     setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      const randomIdx = Math.floor(Math.random() * DUMMY_RESPONSES.length);
+    try {
+      const res = await fetch("http://localhost:3000/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt: promptText })
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to generate content from backend");
+      }
+
+      const data = await res.json();
+      
+      // Update card data with the real fields from Gemini
+      setCardData({
+        description: data.description || "No description provided.",
+        arguments: data.arguments || "No arguments overview provided.",
+        returnValues: data.returnValues || "No return values provided.",
+        todo: data.todo || "No tasks listed.",
+        tips: data.tips || "No tips provided.",
+        code: data.code || "// No code block returned."
+      });
+
+      // Add AI response to chat logs
       setChatMessages(prev => [
         ...prev,
         {
-          id: Date.now() + 1,
+          id: Date.now(),
           type: 'ai',
-          text: DUMMY_RESPONSES[randomIdx]
+          text: data.description || "Here is your generated code module."
         }
       ]);
-    }, 1500);
+    } catch (err) {
+      console.error("Error communicating with backend:", err);
+      setChatMessages(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          type: 'ai',
+          text: "Error: Could not connect to the backend server. Please verify that the backend is running at http://localhost:3000 and the GEMINI_API_KEY is configured in your backend .env file."
+        }
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -78,6 +122,14 @@ function App() {
     setChatMessages([]);
     setShowCode(false);
     setIsTyping(false);
+    setCardData({
+      description: "Please enter a prompt to generate documentation.",
+      arguments: "No parameters defined.",
+      returnValues: "No return values defined.",
+      todo: "Checklist is empty.",
+      tips: "No implementation tips available.",
+      code: "// Press Reveal Code after prompt generation completes"
+    });
   };
 
   return (
@@ -113,36 +165,51 @@ function App() {
           <div className="scroll-container" ref={scrollRef}>
             <div className="cards-layout">
               {/* Card 1: Description */}
-              <div className="figma-card full-card">
+              <div className="figma-card full-card" style={{ height: 'auto', minHeight: '173px' }}>
                 <img src={imgExample2} className="card-texture" alt="" />
                 <h2 className="card-title">Description</h2>
+                <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
+                  {cardData.description}
+                </p>
               </div>
 
               {/* Row of two half-width cards */}
               <div className="card-row">
                 {/* Card 2: Arguments */}
-                <div className="figma-card half-card">
+                <div className="figma-card half-card" style={{ height: 'auto', minHeight: '254px' }}>
                   <img src={imgExample2} className="card-texture" alt="" />
                   <h2 className="card-title">Arguments</h2>
+                  <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
+                    {cardData.arguments}
+                  </p>
                 </div>
                 
                 {/* Card 3: Return values */}
-                <div className="figma-card half-card">
+                <div className="figma-card half-card" style={{ height: 'auto', minHeight: '254px' }}>
                   <img src={imgExample2} className="card-texture" alt="" />
                   <h2 className="card-title">Return values</h2>
+                  <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
+                    {cardData.returnValues}
+                  </p>
                 </div>
               </div>
 
               {/* Card 4: TO DO */}
-              <div className="figma-card full-card">
+              <div className="figma-card full-card" style={{ height: 'auto', minHeight: '173px' }}>
                 <img src={imgExample2} className="card-texture" alt="" />
                 <h2 className="card-title">TO DO</h2>
+                <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
+                  {cardData.todo}
+                </p>
               </div>
 
               {/* Card 5: Tips */}
-              <div className="figma-card full-card">
+              <div className="figma-card full-card" style={{ height: 'auto', minHeight: '173px' }}>
                 <img src={imgExample2} className="card-texture" alt="" />
                 <h2 className="card-title">Tips</h2>
+                <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
+                  {cardData.tips}
+                </p>
               </div>
 
               {/* Interactive chat logs in screen flow */}
@@ -188,18 +255,8 @@ function App() {
                 </button>
 
                 {showCode && (
-                  <pre className="code-content-box">
-                    <span className="code-comment">// 1:1 Figma Design mapping verified successfully</span>{"\n"}
-                    <span className="code-keyword">import</span> React <span className="code-keyword">from</span> <span className="code-string">'react'</span>;{"\n\n"}
-                    <span className="code-keyword">export default function</span> <span className="code-func">Slide</span>() &#123;{"\n"}
-                    &nbsp;&nbsp;<span className="code-keyword">return</span> ({"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-keyword">div</span> className=<span className="code-string">"bg-gradient-to-b from-[#0e0f2e] to-[#2d3094] relative"</span>&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">DescriptionCard</span> /&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">ArgumentsRow</span> /&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">PromptBar</span> className=<span className="code-string">"fixed bottom-[114px]"</span> /&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span className="code-keyword">div</span>&gt;{"\n"}
-                    &nbsp;&nbsp;);{"\n"}
-                    &#125;
+                  <pre className="code-content-box" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                    {cardData.code}
                   </pre>
                 )}
               </div>
