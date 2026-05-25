@@ -1,14 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 // Assets from local figma mcp server
-const imgMenu = "http://localhost:3845/assets/500baaa8c6927574084507a983ef1d2f3ca1f181.svg";
-const imgClip = "http://localhost:3845/assets/74a2193423a403dcdd4220396e20470cd291602f.svg";
-const imgSend = "http://localhost:3845/assets/7ec3119331019642b036d3081b2518e019c1f5b8.svg";
-
 const imgExample2 = "http://localhost:3845/assets/5ba0970993e0ba180516990dd8a51489631d4d02.png";
-const imgImage3 = "/image 3.svg";
-const imgImage1 = "/image 1.svg";
-const imgTimerBg = "/Example2.svg";
+const imgClock = "/image 1.svg";
+const imgClockArrow = "/image 3.svg";
+const imgClockWidgetBg = "/Group 1.png";
+const imgPaperclip = "/paperclip.png";
 const imgRectangle3 = "http://localhost:3845/assets/e597753f374f81d72b834e02331e42efc244ef4f.svg";
 
 const DUMMY_RESPONSES = [
@@ -18,14 +15,68 @@ const DUMMY_RESPONSES = [
   "The timer widget is active. Let me know if you would like me to unpack other nested frames!"
 ];
 
+const STATS_OPTIONS = [
+  { key: "W", label: "Week", value: 10 },
+  { key: "M", label: "Month", value: 30 },
+  { key: "Y", label: "Year", value: 100 },
+];
+
+const SCORE_RATINGS = {
+  W: { red: 2, yellow: 3, green: 5 },
+  M: { red: 8, yellow: 10, green: 12 },
+  Y: { red: 21, yellow: 34, green: 45 },
+};
+
+const REVEAL_HISTORY = {
+  W: [
+    { label: "Mon", value: 1 },
+    { label: "Tue", value: 2 },
+    { label: "Wed", value: 1 },
+    { label: "Thu", value: 3 },
+    { label: "Fri", value: 2 },
+    { label: "Sat", value: 0 },
+    { label: "Sun", value: 1 },
+  ],
+  M: [
+    { label: "W1", value: 6 },
+    { label: "W2", value: 7 },
+    { label: "W3", value: 8 },
+    { label: "W4", value: 9 },
+  ],
+  Y: [
+    { label: "Jan", value: 6 },
+    { label: "Feb", value: 7 },
+    { label: "Mar", value: 9 },
+    { label: "Apr", value: 8 },
+    { label: "May", value: 10 },
+    { label: "Jun", value: 7 },
+    { label: "Jul", value: 8 },
+    { label: "Aug", value: 9 },
+    { label: "Sep", value: 11 },
+    { label: "Oct", value: 10 },
+    { label: "Nov", value: 12 },
+    { label: "Dec", value: 13 },
+  ],
+};
+
 function App() {
-  const [viewMode, setViewMode] = useState("welcome"); // 'welcome' | 'chat'
+  const [viewMode, setViewMode] = useState("welcome"); // 'welcome' | 'chat' | 'stats'
   const [inputValue, setInputValue] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [statsRange, setStatsRange] = useState("W");
 
   const scrollRef = useRef(null);
+  const nextMessageId = useRef(1);
+  const selectedStat = STATS_OPTIONS.find(option => option.key === statsRange) ?? STATS_OPTIONS[0];
+  const selectedRatings = SCORE_RATINGS[statsRange];
+  const ratingTotal = selectedRatings.red + selectedRatings.yellow + selectedRatings.green;
+  const redPercent = Math.round((selectedRatings.red / ratingTotal) * 100);
+  const yellowPercent = Math.round((selectedRatings.yellow / ratingTotal) * 100);
+  const greenPercent = 100 - redPercent - yellowPercent;
+  const selectedHistory = REVEAL_HISTORY[statsRange];
+  const maxHistoryValue = Math.max(...selectedHistory.map(item => item.value));
 
   // Auto-scroll to bottom when in chat mode
   useEffect(() => {
@@ -40,13 +91,13 @@ function App() {
     const userText = inputValue;
     setInputValue("");
 
-    if (viewMode === "welcome") {
+    if (viewMode === "welcome" || viewMode === "stats") {
       // Transition from Welcome screen to Chat cards screen
       setViewMode("chat");
-      setChatMessages([{ id: Date.now(), type: 'user', text: userText }]);
+      setChatMessages([{ id: nextMessageId.current++, type: 'user', text: userText }]);
       triggerAIReply();
     } else {
-      setChatMessages(prev => [...prev, { id: Date.now(), type: 'user', text: userText }]);
+      setChatMessages(prev => [...prev, { id: nextMessageId.current++, type: 'user', text: userText }]);
       triggerAIReply();
     }
   };
@@ -59,7 +110,7 @@ function App() {
       setChatMessages(prev => [
         ...prev,
         {
-          id: Date.now() + 1,
+          id: nextMessageId.current++,
           type: 'ai',
           text: DUMMY_RESPONSES[randomIdx]
         }
@@ -84,18 +135,18 @@ function App() {
     <div className="app-viewport">
       {/* Top Left Menu Button (Reset / Welcome back button) */}
       <button className="menu-btn" aria-label="Open menu" onClick={resetToWelcome}>
-        <img src={imgMenu} alt="Menu" />
+        <span aria-hidden="true"></span>
       </button>
 
-      {/* Top Right Timer Widget - only rendered in Chat Mode */}
-      {viewMode === "chat" && (
-        <div className="timer-widget">
-          <img src={imgTimerBg} className="timer-widget-bg" alt="" />
-          <div className="timer-icon-group">
-            <img src={imgImage1} className="timer-img-1" alt="Clock" />
-            <img src={imgImage3} className="timer-img-3" alt="Arrow" />
-          </div>
-        </div>
+      {/* Top Right Timer Widget */}
+      {viewMode !== "stats" && (
+        <button className="timer-widget" type="button" aria-label="Open statistics" onClick={() => setViewMode("stats")}>
+          <img src={imgClockWidgetBg} className="timer-widget-bg" alt="" />
+          <span className="timer-icon-group" aria-hidden="true">
+            <img src={imgClock} className="timer-img-1" alt="" />
+            <img src={imgClockArrow} className="timer-img-3" alt="" />
+          </span>
+        </button>
       )}
 
       {/* Content Layout Division */}
@@ -207,12 +258,146 @@ function App() {
           </div>
         )}
 
+        {viewMode === "stats" && (
+          <div className="stats-container">
+            <h1 className="analytics-title">Analytics</h1>
+            <div className="stats-layout">
+              <div className="figma-card stats-card reveal-stats-card">
+                <img src={imgExample2} className="card-texture" alt="" />
+                <div className="compact-card-content">
+                  <div className="score-card-header">
+                    <h2 className="stats-title">Reveals this {selectedStat.label}</h2>
+                    <div className="score-range-controls" aria-label="Reveal code range">
+                      {STATS_OPTIONS.map(option => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
+                          onClick={() => setStatsRange(option.key)}
+                          aria-label={option.label}
+                          aria-pressed={statsRange === option.key}
+                        >
+                          {option.key}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="stats-value">{selectedStat.value}</div>
+                </div>
+              </div>
+
+              <div className="figma-card stats-card score-card">
+                <img src={imgExample2} className="card-texture" alt="" />
+                <div className="score-card-content">
+                  <div className="score-card-header">
+                    <div>
+                      <h2 className="score-title">Score ratings</h2>
+                    </div>
+                    <div className="score-range-controls" aria-label="Score rating range">
+                      {STATS_OPTIONS.map(option => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
+                          onClick={() => setStatsRange(option.key)}
+                          aria-label={option.label}
+                          aria-pressed={statsRange === option.key}
+                        >
+                          {option.key}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="score-chart-row">
+                    <div
+                      className="score-chart"
+                      style={{
+                        "--red": `${redPercent}%`,
+                        "--yellow": `${yellowPercent}%`,
+                      }}
+                      aria-label={`Bad ${redPercent}%, mid ${yellowPercent}%, good ${greenPercent}%`}
+                    >
+                      <div className="score-chart-center">
+                        <span>{ratingTotal}</span>
+                        <small>{selectedStat.label}</small>
+                      </div>
+                    </div>
+
+                    <div className="score-scale">
+                      <div className="score-scale-item bad">
+                        <span></span>
+                        <strong>{selectedRatings.red}</strong>
+                        <small>Bad</small>
+                      </div>
+                      <div className="score-scale-item mid">
+                        <span></span>
+                        <strong>{selectedRatings.yellow}</strong>
+                        <small>Mid</small>
+                      </div>
+                      <div className="score-scale-item good">
+                        <span></span>
+                        <strong>{selectedRatings.green}</strong>
+                        <small>Good</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="figma-card stats-card bar-card">
+                <img src={imgExample2} className="card-texture" alt="" />
+                <div className="bar-card-content">
+                  <div className="score-card-header">
+                    <div>
+                      <h2 className="score-title">Reveals history</h2>
+                    </div>
+                    <div className="score-range-controls" aria-label="Reveal history range">
+                      {STATS_OPTIONS.map(option => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
+                          onClick={() => setStatsRange(option.key)}
+                          aria-label={option.label}
+                          aria-pressed={statsRange === option.key}
+                        >
+                          {option.key}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bar-chart-shell">
+                    <div className="bar-y-axis" aria-hidden="true">
+                      {[maxHistoryValue, Math.round(maxHistoryValue * 0.75), Math.round(maxHistoryValue * 0.5), Math.round(maxHistoryValue * 0.25), 0].map(value => (
+                        <span key={value}>{value}</span>
+                      ))}
+                    </div>
+                    <div className={`bar-chart range-${statsRange.toLowerCase()}`}>
+                      {selectedHistory.map(item => (
+                        <div className="bar-item" key={item.label}>
+                          <div className="bar-value">{item.value}</div>
+                          <div className="bar-track">
+                            <span style={{ height: `${Math.max((item.value / maxHistoryValue) * 100, 5)}%` }}></span>
+                          </div>
+                          <div className="bar-label">{item.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Floating Prompt Bar (Transitions depending on welcome / chat layout) */}
-        <div className={`prompt-bar-wrapper ${viewMode === "welcome" ? "welcome-mode" : "chat-mode"}`}>
+        <div className={`prompt-bar-wrapper ${viewMode === "chat" ? "chat-mode" : "welcome-mode"}`}>
           <div className="prompt-bar">
             {/* Flat Clip Button */}
-            <button className="clip-btn" aria-label="Attach file">
-              <img src={imgClip} alt="Clip" />
+            <button className="clip-btn" type="button" aria-label="Attach file">
+              <img src={imgPaperclip} alt="" aria-hidden="true" />
             </button>
 
             {/* Search Input Field */}
@@ -229,8 +414,8 @@ function App() {
             </div>
 
             {/* Send Button */}
-            <button className="send-btn" onClick={handleSend} aria-label="Send message" disabled={isTyping}>
-              <img src={imgSend} alt="Send" />
+            <button className="send-btn" type="button" onClick={handleSend} aria-label="Send message" disabled={isTyping}>
+              <span aria-hidden="true"></span>
             </button>
           </div>
         </div>
