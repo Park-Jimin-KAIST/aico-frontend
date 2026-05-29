@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 
 // Assets from local figma mcp server
 const imgExample2 = "http://localhost:3845/assets/5ba0970993e0ba180516990dd8a51489631d4d02.png";
@@ -7,13 +7,6 @@ const imgClockArrow = "/image 3.svg";
 const imgClockWidgetBg = "/Group 1.png";
 const imgPaperclip = "/paperclip.png";
 const imgRectangle3 = "http://localhost:3845/assets/e597753f374f81d72b834e02331e42efc244ef4f.svg";
-
-const DUMMY_RESPONSES = [
-  "Certainly! The structures of arguments and description modules are mapped correctly inside your Figma draft.",
-  "Understood! Let me fetch the code connections for you. Here is what we found on node 11:10.",
-  "Generating responsive React components with custom neon pink and purple glows for you.",
-  "The timer widget is active. Let me know if you would like me to unpack other nested frames!"
-];
 
 const STATS_OPTIONS = [
   { key: "W", label: "Week", value: 10 },
@@ -60,15 +53,17 @@ const REVEAL_HISTORY = {
 };
 
 function App() {
-  const [viewMode, setViewMode] = useState("welcome"); // 'welcome' | 'chat' | 'stats'
-  const [inputValue, setInputValue] = useState("");
+  const [viewMode, setViewMode] = useState("assignment"); // 'assignment' | 'processing' | 'review' | 'stats'
+  const [taskDescription, setTaskDescription] = useState("");
+  const [bottomPrompt, setBottomPrompt] = useState("");
+  const [userCode, setUserCode] = useState("");
+  const [assignmentFileName, setAssignmentFileName] = useState("");
+  const [codeFileName, setCodeFileName] = useState("");
   const [showCode, setShowCode] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [isAssignmentExpanded, setIsAssignmentExpanded] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [statsRange, setStatsRange] = useState("W");
 
-  const scrollRef = useRef(null);
-  const nextMessageId = useRef(1);
   const selectedStat = STATS_OPTIONS.find(option => option.key === statsRange) ?? STATS_OPTIONS[0];
   const selectedRatings = SCORE_RATINGS[statsRange];
   const ratingTotal = selectedRatings.red + selectedRatings.yellow + selectedRatings.green;
@@ -78,57 +73,61 @@ function App() {
   const selectedHistory = REVEAL_HISTORY[statsRange];
   const maxHistoryValue = Math.max(...selectedHistory.map(item => item.value));
 
-  // Auto-scroll to bottom when in chat mode
-  useEffect(() => {
-    if (viewMode === "chat" && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [chatMessages, showCode, isTyping, viewMode]);
-
   const handleSend = () => {
-    if (!inputValue.trim()) return;
-
-    const userText = inputValue;
-    setInputValue("");
-
-    if (viewMode === "welcome" || viewMode === "stats") {
-      // Transition from Welcome screen to Chat cards screen
-      setViewMode("chat");
-      setChatMessages([{ id: nextMessageId.current++, type: 'user', text: userText }]);
-      triggerAIReply();
-    } else {
-      setChatMessages(prev => [...prev, { id: nextMessageId.current++, type: 'user', text: userText }]);
-      triggerAIReply();
-    }
+    if ((!taskDescription.trim() && !assignmentFileName) || isTyping) return;
+    setViewMode("processing");
+    triggerAIReply();
   };
 
   const triggerAIReply = () => {
     setIsTyping(true);
     setTimeout(() => {
       setIsTyping(false);
-      const randomIdx = Math.floor(Math.random() * DUMMY_RESPONSES.length);
-      setChatMessages(prev => [
-        ...prev,
-        {
-          id: nextMessageId.current++,
-          type: 'ai',
-          text: DUMMY_RESPONSES[randomIdx]
-        }
-      ]);
+      setViewMode("review");
     }, 1500);
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       handleSend();
     }
   };
 
   const resetToWelcome = () => {
-    setViewMode("welcome");
-    setChatMessages([]);
+    setViewMode("assignment");
+    setTaskDescription("");
+    setBottomPrompt("");
+    setUserCode("");
+    setAssignmentFileName("");
+    setCodeFileName("");
     setShowCode(false);
+    setIsAssignmentExpanded(false);
     setIsTyping(false);
+  };
+
+  const handleCodeSubmit = () => {
+    if (!userCode.trim()) return;
+  };
+
+  const handleBottomPromptSend = () => {
+    if (!bottomPrompt.trim()) return;
+    setBottomPrompt("");
+  };
+
+  const handleAssignmentFile = (file) => {
+    if (!file) return;
+    setAssignmentFileName(file.name);
+  };
+
+  const handleCodeFile = (file) => {
+    if (!file) return;
+    setCodeFileName(file.name);
+    file.text().then(setUserCode).catch(() => {});
+  };
+
+  const preventDragDefaults = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   return (
@@ -151,110 +150,171 @@ function App() {
 
       {/* Content Layout Division */}
       <div className="content-layout">
-        
-        {/* Welcome Mode Elements */}
-        {viewMode === "welcome" && (
-          <h1 className="main-title">
-            Hello, how may I help you today?
-          </h1>
+        {(viewMode === "assignment" || viewMode === "processing") && (
+          <section className={`assignment-panel ${viewMode === "processing" ? "is-processing" : ""}`}>
+            <label
+              className="assignment-dropzone"
+              onDragEnter={preventDragDefaults}
+              onDragOver={preventDragDefaults}
+              onDrop={(e) => {
+                preventDragDefaults(e);
+                handleAssignmentFile(e.dataTransfer.files?.[0]);
+              }}
+            >
+              <img src={imgPaperclip} alt="" aria-hidden="true" />
+              <span>{assignmentFileName || "Upload your assignment"}</span>
+              <input
+                type="file"
+                className="visually-hidden-input"
+                onChange={(e) => handleAssignmentFile(e.target.files?.[0])}
+              />
+            </label>
+
+            <textarea
+              className="assignment-textarea"
+              placeholder="Type the task description"
+              value={taskDescription}
+              onChange={(e) => setTaskDescription(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isTyping}
+            />
+
+            <button className="assignment-send-btn send-btn" type="button" onClick={handleSend} aria-label="Send assignment" disabled={isTyping}>
+              <span aria-hidden="true"></span>
+            </button>
+
+            {viewMode === "processing" && (
+              <p className="assignment-status">AI is analyzing...</p>
+            )}
+          </section>
         )}
 
-        {/* Chat Mode Elements (Scrollable Card Area) */}
-        {viewMode === "chat" && (
-          <div className="scroll-container" ref={scrollRef}>
-            <div className="cards-layout">
-              {/* Card 1: Description */}
+        {viewMode === "review" && (
+          <div className="scroll-container review-scroll">
+            <section className="cards-layout review-cards-layout">
+              <div className="assignment-message-row">
+                <div className={`assignment-message ${isAssignmentExpanded ? "expanded" : ""}`}>
+                  {assignmentFileName && (
+                    <span className="assignment-message-file">{assignmentFileName}</span>
+                  )}
+                  <p>{taskDescription || "Uploaded assignment"}</p>
+                  {taskDescription.length > 120 && (
+                    <button type="button" onClick={() => setIsAssignmentExpanded(prev => !prev)}>
+                      {isAssignmentExpanded ? "Show less" : "Show more"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="figma-card full-card">
                 <img src={imgExample2} className="card-texture" alt="" />
                 <h2 className="card-title">Description</h2>
               </div>
 
-              {/* Row of two half-width cards */}
               <div className="card-row">
-                {/* Card 2: Arguments */}
                 <div className="figma-card half-card">
                   <img src={imgExample2} className="card-texture" alt="" />
                   <h2 className="card-title">Arguments</h2>
                 </div>
                 
-                {/* Card 3: Return values */}
                 <div className="figma-card half-card">
                   <img src={imgExample2} className="card-texture" alt="" />
                   <h2 className="card-title">Return values</h2>
                 </div>
               </div>
 
-              {/* Card 4: TO DO */}
               <div className="figma-card full-card">
                 <img src={imgExample2} className="card-texture" alt="" />
                 <h2 className="card-title">TO DO</h2>
               </div>
 
-              {/* Card 5: Tips */}
               <div className="figma-card full-card">
                 <img src={imgExample2} className="card-texture" alt="" />
                 <h2 className="card-title">Tips</h2>
               </div>
 
-              {/* Interactive chat logs in screen flow */}
-              {chatMessages.map(msg => (
-                <div 
-                  key={msg.id} 
-                  className="figma-card full-card" 
-                  style={{ 
-                    height: 'auto', 
-                    minHeight: '120px', 
-                    borderColor: msg.type === 'user' ? '#ec83bb' : '#cad6e8',
-                    boxShadow: msg.type === 'user' ? '0px 4px 20px 0px rgba(236,131,187,0.2)' : '0px 4px 20px 0px rgba(91,71,188,0.3)'
-                  }}
-                >
-                  <img src={imgExample2} className="card-texture" alt="" />
-                  <div style={{ position: 'relative', zIndex: 2 }}>
-                    <span style={{ fontSize: '14px', color: msg.type === 'user' ? '#ec83bb' : '#cad6e8', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
-                      {msg.type === 'user' ? 'YOU' : 'AI'}
-                    </span>
-                    <p style={{ fontSize: '20px', lineHeight: 1.5 }}>{msg.text}</p>
+              <div className="review-workspace">
+                <div className="review-column">
+                  <div className="figma-card reveal-card review-reveal-card">
+                    <img src={imgExample2} className="card-texture" alt="" />
+                    
+                    <button className="reveal-btn" onClick={() => setShowCode(!showCode)}>
+                      <img src={imgRectangle3} className="reveal-btn-bg" alt="" />
+                      <span className="reveal-btn-text">
+                        {showCode ? "Hide code" : "Reveal AI code"}
+                      </span>
+                    </button>
+
+                    {showCode && (
+                      <pre className="code-content-box">
+                        <span className="code-comment">// 1:1 Figma Design mapping verified successfully</span>{"\n"}
+                        <span className="code-keyword">import</span> React <span className="code-keyword">from</span> <span className="code-string">'react'</span>;{"\n\n"}
+                        <span className="code-keyword">export default function</span> <span className="code-func">Slide</span>() &#123;{"\n"}
+                        &nbsp;&nbsp;<span className="code-keyword">return</span> ({"\n"}
+                        &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-keyword">div</span> className=<span className="code-string">"bg-gradient-to-b from-[#0e0f2e] to-[#2d3094] relative"</span>&gt;{"\n"}
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">DescriptionCard</span> /&gt;{"\n"}
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">ArgumentsRow</span> /&gt;{"\n"}
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">PromptBar</span> className=<span className="code-string">"fixed bottom-[114px]"</span> /&gt;{"\n"}
+                        &nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span className="code-keyword">div</span>&gt;{"\n"}
+                        &nbsp;&nbsp;);{"\n"}
+                        &#125;
+                      </pre>
+                    )}
                   </div>
                 </div>
-              ))}
 
-              {isTyping && (
-                <div className="figma-card full-card" style={{ height: 'auto', minHeight: '100px' }}>
-                  <img src={imgExample2} className="card-texture" alt="" />
-                  <p style={{ fontSize: '18px', fontStyle: 'italic', opacity: 0.7, position: 'relative', zIndex: 2 }}>
-                    AI is analyzing...
-                  </p>
+                <div className="review-column">
+                  <div className="figma-card user-code-card">
+                    <img src={imgExample2} className="card-texture" alt="" />
+                    <div className="user-code-header">
+                      <h2 className="card-title">Your code</h2>
+                      <label className="clip-btn code-upload-btn" aria-label="Upload code file">
+                        <img src={imgPaperclip} alt="" aria-hidden="true" />
+                        <input
+                          type="file"
+                          className="visually-hidden-input"
+                          accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.html,.css,.json,.txt"
+                          onChange={(e) => handleCodeFile(e.target.files?.[0])}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="code-editor-shell">
+                      <div className="editor-topbar">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <small>{codeFileName || "solution.jsx"}</small>
+                      </div>
+                      <div
+                        className="editor-body"
+                        onDragEnter={preventDragDefaults}
+                        onDragOver={preventDragDefaults}
+                        onDrop={(e) => {
+                          preventDragDefaults(e);
+                          handleCodeFile(e.dataTransfer.files?.[0]);
+                        }}
+                      >
+                        <div className="editor-lines" aria-hidden="true">
+                          {Array.from({ length: 14 }, (_, idx) => <span key={idx}>{idx + 1}</span>)}
+                        </div>
+                        <textarea
+                          className="code-editor-input"
+                          placeholder="Type in the code..."
+                          value={userCode}
+                          onChange={(e) => setUserCode(e.target.value)}
+                          spellCheck="false"
+                        />
+                      </div>
+                    </div>
+
+                    <button className="primary-submit-btn" type="button" onClick={handleCodeSubmit}>
+                      Submit for review
+                    </button>
+                  </div>
                 </div>
-              )}
-
-              {/* Card 6: Reveal code card (Interactive) */}
-              <div className="figma-card reveal-card">
-                <img src={imgExample2} className="card-texture" alt="" />
-                
-                <button className="reveal-btn" onClick={() => setShowCode(!showCode)}>
-                  <img src={imgRectangle3} className="reveal-btn-bg" alt="" />
-                  <span className="reveal-btn-text">
-                    {showCode ? "Hide code" : "Reveal code"}
-                  </span>
-                </button>
-
-                {showCode && (
-                  <pre className="code-content-box">
-                    <span className="code-comment">// 1:1 Figma Design mapping verified successfully</span>{"\n"}
-                    <span className="code-keyword">import</span> React <span className="code-keyword">from</span> <span className="code-string">'react'</span>;{"\n\n"}
-                    <span className="code-keyword">export default function</span> <span className="code-func">Slide</span>() &#123;{"\n"}
-                    &nbsp;&nbsp;<span className="code-keyword">return</span> ({"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-keyword">div</span> className=<span className="code-string">"bg-gradient-to-b from-[#0e0f2e] to-[#2d3094] relative"</span>&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">DescriptionCard</span> /&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">ArgumentsRow</span> /&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">PromptBar</span> className=<span className="code-string">"fixed bottom-[114px]"</span> /&gt;{"\n"}
-                    &nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span className="code-keyword">div</span>&gt;{"\n"}
-                    &nbsp;&nbsp;);{"\n"}
-                    &#125;
-                  </pre>
-                )}
               </div>
-            </div>
+            </section>
           </div>
         )}
 
@@ -370,8 +430,8 @@ function App() {
 
                   <div className="bar-chart-shell">
                     <div className="bar-y-axis" aria-hidden="true">
-                      {[maxHistoryValue, Math.round(maxHistoryValue * 0.75), Math.round(maxHistoryValue * 0.5), Math.round(maxHistoryValue * 0.25), 0].map(value => (
-                        <span key={value}>{value}</span>
+                      {[maxHistoryValue, Math.round(maxHistoryValue * 0.75), Math.round(maxHistoryValue * 0.5), Math.round(maxHistoryValue * 0.25), 0].map((value, index) => (
+                        <span key={`${value}-${index}`}>{value}</span>
                       ))}
                     </div>
                     <div className={`bar-chart range-${statsRange.toLowerCase()}`}>
@@ -392,33 +452,48 @@ function App() {
           </div>
         )}
 
-        {/* Floating Prompt Bar (Transitions depending on welcome / chat layout) */}
-        <div className={`prompt-bar-wrapper ${viewMode === "chat" ? "chat-mode" : "welcome-mode"}`}>
-          <div className="prompt-bar">
-            {/* Flat Clip Button */}
-            <button className="clip-btn" type="button" aria-label="Attach file">
-              <img src={imgPaperclip} alt="" aria-hidden="true" />
-            </button>
+        {viewMode !== "assignment" && viewMode !== "stats" && (
+          <div className="compact-prompt-wrapper">
+            <div className="prompt-bar compact-prompt-bar">
+              <label className="clip-btn compact-prompt-clip" aria-label="Attach file">
+                <img src={imgPaperclip} alt="" aria-hidden="true" />
+                <input
+                  type="file"
+                  className="visually-hidden-input"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (viewMode === "review") {
+                      handleCodeFile(file);
+                    } else {
+                      handleAssignmentFile(file);
+                    }
+                  }}
+                />
+              </label>
 
-            {/* Search Input Field */}
-            <div className="prompt-left-group">
-              <input
-                type="text"
-                className="prompt-input"
-                placeholder="Ask a question"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isTyping}
-              />
+              <div className="prompt-left-group compact-prompt-input-wrap">
+                <input
+                  type="text"
+                  className="prompt-input compact-prompt-input"
+                  placeholder="Add a note"
+                  value={bottomPrompt}
+                  onChange={(e) => setBottomPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleBottomPromptSend();
+                    }
+                  }}
+                  disabled={isTyping}
+                />
+              </div>
+
+              <button className="send-btn compact-prompt-send" type="button" onClick={handleBottomPromptSend} aria-label="Send note" disabled={isTyping}>
+                <span aria-hidden="true"></span>
+              </button>
             </div>
-
-            {/* Send Button */}
-            <button className="send-btn" type="button" onClick={handleSend} aria-label="Send message" disabled={isTyping}>
-              <span aria-hidden="true"></span>
-            </button>
           </div>
-        </div>
+        )}
+
       </div>
     </div>
   )
