@@ -1,297 +1,1031 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import { GoogleLogin } from '@react-oauth/google'
+import { jwtDecode } from 'jwt-decode'
 
 // Assets from local figma mcp server
-const imgMenu = "http://localhost:3845/assets/500baaa8c6927574084507a983ef1d2f3ca1f181.svg";
-const imgClip = "http://localhost:3845/assets/74a2193423a403dcdd4220396e20470cd291602f.svg";
-const imgSend = "http://localhost:3845/assets/7ec3119331019642b036d3081b2518e019c1f5b8.svg";
-
 const imgExample2 = "http://localhost:3845/assets/5ba0970993e0ba180516990dd8a51489631d4d02.png";
-const imgImage3 = "/image 3.svg";
-const imgImage1 = "/image 1.svg";
-const imgTimerBg = "/Example2.svg";
+const imgClock = "/image 1.svg";
+const imgClockArrow = "/image 3.svg";
+const imgClockWidgetBg = "/Group 1.png";
+const imgPaperclip = "/paperclip.png";
 const imgRectangle3 = "http://localhost:3845/assets/e597753f374f81d72b834e02331e42efc244ef4f.svg";
 
-const DUMMY_RESPONSES = [
-  "Certainly! The structures of arguments and description modules are mapped correctly inside your Figma draft.",
-  "Understood! Let me fetch the code connections for you. Here is what we found on node 11:10.",
-  "Generating responsive React components with custom neon pink and purple glows for you.",
-  "The timer widget is active. Let me know if you would like me to unpack other nested frames!"
+const STATS_OPTIONS = [
+  { key: "W", label: "Week", value: 10 },
+  { key: "M", label: "Month", value: 30 },
+  { key: "Y", label: "Year", value: 100 },
 ];
 
+const SCORE_RATINGS = {
+  W: { red: 2, yellow: 3, green: 5 },
+  M: { red: 8, yellow: 10, green: 12 },
+  Y: { red: 21, yellow: 34, green: 45 },
+};
+
+const REVEAL_HISTORY = {
+  W: [
+    { label: "Mon", value: 1 },
+    { label: "Tue", value: 2 },
+    { label: "Wed", value: 1 },
+    { label: "Thu", value: 3 },
+    { label: "Fri", value: 2 },
+    { label: "Sat", value: 0 },
+    { label: "Sun", value: 1 },
+  ],
+  M: [
+    { label: "W1", value: 6 },
+    { label: "W2", value: 7 },
+    { label: "W3", value: 8 },
+    { label: "W4", value: 9 },
+  ],
+  Y: [
+    { label: "Jan", value: 6 },
+    { label: "Feb", value: 7 },
+    { label: "Mar", value: 9 },
+    { label: "Apr", value: 8 },
+    { label: "May", value: 10 },
+    { label: "Jun", value: 7 },
+    { label: "Jul", value: 8 },
+    { label: "Aug", value: 9 },
+    { label: "Sep", value: 11 },
+    { label: "Oct", value: 10 },
+    { label: "Nov", value: 12 },
+    { label: "Dec", value: 13 },
+  ],
+};
+
 function App() {
-  const [viewMode, setViewMode] = useState("welcome"); // 'welcome' | 'chat'
-  const [inputValue, setInputValue] = useState("");
+  const [viewMode, setViewMode] = useState("assignment"); // 'assignment' | 'processing' | 'review' | 'stats'
+  const [taskDescription, setTaskDescription] = useState("");
+  const [bottomPrompt, setBottomPrompt] = useState("");
+  const [userCode, setUserCode] = useState("");
+  const [assignmentFileName, setAssignmentFileName] = useState("");
+  const [assignmentFile, setAssignmentFile] = useState(null);
+  const [codeFileName, setCodeFileName] = useState("");
   const [showCode, setShowCode] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [isAssignmentExpanded, setIsAssignmentExpanded] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-
-  // Structured Gemini output data state
-  const [cardData, setCardData] = useState({
-    description: "Please enter a prompt to generate documentation.",
-    arguments: "No parameters defined.",
-    returnValues: "No return values defined.",
-    todo: "Checklist is empty.",
-    tips: "No implementation tips available.",
-    code: "// Press Reveal Code after prompt generation completes"
-  });
-
-  const scrollRef = useRef(null);
-
-  // Auto-scroll to bottom when in chat mode
-  useEffect(() => {
-    if (viewMode === "chat" && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const [statsRange, setStatsRange] = useState("W");
+  const [cardData, setCardData] = useState(null);
+  const [expandedCard, setExpandedCard] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem("currentUser");
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Error parsing saved user:", e);
+      return null;
     }
-  }, [chatMessages, showCode, isTyping, viewMode]);
+  });
+  const [statsData, setStatsData] = useState(null);
+  const [evalFeedback, setEvalFeedback] = useState(null);
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [history, setHistory] = useState([]);
 
-    const userText = inputValue;
-    setInputValue("");
-
-    if (viewMode === "welcome") {
-      setViewMode("chat");
-      setChatMessages([{ id: Date.now(), type: 'user', text: userText }]);
-      triggerAIGeneration(userText);
+  // Fetch history when user logs in/out
+  useEffect(() => {
+    if (currentUser && currentUser.userId) {
+      fetch(`http://localhost:3000/api/sessions?userId=${currentUser.userId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            const mapped = data.map(item => ({
+              ...item,
+              id: item._id, // map MongoDB _id to frontend id
+              timestamp: new Date(item.updatedAt).getTime() // map updatedAt to timestamp
+            }));
+            setHistory(mapped);
+          }
+        })
+        .catch(console.error);
     } else {
-      setChatMessages(prev => [...prev, { id: Date.now(), type: 'user', text: userText }]);
-      triggerAIGeneration(userText);
+      const saved = localStorage.getItem("aico_chat_history");
+      try {
+        setHistory(saved ? JSON.parse(saved) : []);
+      } catch (e) {
+        setHistory([]);
+      }
+    }
+  }, [currentUser]);
+
+  // Save guest history to localStorage
+  useEffect(() => {
+    if (!currentUser && history.length > 0) {
+      localStorage.setItem("aico_chat_history", JSON.stringify(history));
+    }
+  }, [history, currentUser]);
+
+  // Debounced API call / localStorage save for code/feedback/prompt changes
+  useEffect(() => {
+    if (!currentSessionId) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      const sessionData = {
+        title: taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment",
+        taskDescription,
+        assignmentFileName,
+        cardData,
+        userCode,
+        evalFeedback,
+        timestamp: Date.now()
+      };
+
+      // 1. Update React state
+      setHistory(prev => {
+        return prev.map(item => {
+          if (item.id === currentSessionId) {
+            return { ...item, ...sessionData };
+          }
+          return item;
+        });
+      });
+
+      // 2. Update MongoDB if logged in
+      if (currentUser && currentUser.userId) {
+        fetch(`http://localhost:3000/api/sessions/${currentSessionId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sessionData)
+        }).catch(console.error);
+      }
+    }, 1000); // 1s debounce
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [userCode, evalFeedback, cardData, taskDescription, assignmentFileName, currentSessionId, currentUser]);
+
+  useEffect(() => {
+    if (viewMode === "stats" && currentUser) {
+      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${statsRange}`)
+        .then(res => res.json())
+        .then(data => setStatsData(data))
+        .catch(console.error);
+    }
+  }, [viewMode, statsRange, currentUser]);
+  
+  const handleLoginSuccess = async (credentialResponse) => {
+    try {
+      const res = await fetch("http://localhost:3000/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: credentialResponse.credential })
+      });
+      const data = await res.json();
+      setCurrentUser(data);
+      localStorage.setItem("currentUser", JSON.stringify(data));
+    } catch (e) {
+      const decoded = jwtDecode(credentialResponse.credential);
+      const mockUser = { userId: "mock-id-123", name: decoded.name, picture: decoded.picture };
+      setCurrentUser(mockUser);
+      localStorage.setItem("currentUser", JSON.stringify(mockUser));
     }
   };
 
-  const triggerAIGeneration = async (promptText) => {
+  const parseTodoText = (text) => {
+    if (!text) return null;
+    const steps = text.split(/(?=Step \d+:)/).filter(s => s.trim() !== "");
+    if (steps.length === 1) return <p className="card-content-text">{text}</p>;
+    return (
+      <ul className="todo-list">
+        {steps.map((step, idx) => (
+          <li key={idx} className="todo-list-item">{step.trim()}</li>
+        ))}
+      </ul>
+    );
+  };
+
+  const selectedStat = STATS_OPTIONS.find(option => option.key === statsRange) ?? STATS_OPTIONS[0];
+  const selectedRatings = statsData ? statsData.scoreRatings : { red: 0, yellow: 0, green: 0 };
+  const ratingTotal = selectedRatings.red + selectedRatings.yellow + selectedRatings.green;
+  const redPercent = ratingTotal ? Math.round((selectedRatings.red / ratingTotal) * 100) : 0;
+  const yellowPercent = ratingTotal ? Math.round((selectedRatings.yellow / ratingTotal) * 100) : 0;
+  const greenPercent = ratingTotal ? 100 - redPercent - yellowPercent : 0;
+  const selectedHistory = statsData?.history || [];
+  const maxHistoryValue = selectedHistory.length > 0 ? Math.max(...selectedHistory.map(item => item.value)) : 10;
+  const totalReveals = statsData?.totalReveals || 0;
+
+  const handleSend = () => {
+    if ((!taskDescription.trim() && !assignmentFileName) || isTyping) return;
+    setViewMode("processing");
+    triggerAIReply();
+  };
+
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+
+  const triggerAIReply = async () => {
     setIsTyping(true);
     try {
-      const res = await fetch("http://localhost:3000/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ prompt: promptText })
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to generate content from backend");
+      let fileData = null;
+      let fileMimeType = null;
+      if (assignmentFile) {
+        const base64String = await fileToBase64(assignmentFile);
+        fileData = base64String.split(",")[1];
+        fileMimeType = assignmentFile.type;
       }
 
-      const data = await res.json();
-      
-      // Update card data with the real fields from Gemini
-      setCardData({
-        description: data.description || "No description provided.",
-        arguments: data.arguments || "No arguments overview provided.",
-        returnValues: data.returnValues || "No return values provided.",
-        todo: data.todo || "No tasks listed.",
-        tips: data.tips || "No tips provided.",
-        code: data.code || "// No code block returned."
+      const response = await fetch("http://localhost:3000/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: taskDescription,
+          file: fileData ? { data: fileData, mimeType: fileMimeType } : null
+        })
       });
 
-      // Add AI response to chat logs
-      setChatMessages(prev => [
-        ...prev,
-        {
-          id: Date.now(),
-          type: 'ai',
-          text: data.description || "Here is your generated code module."
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setCardData(data);
+      setViewMode("review");
+
+      const sessionTitle = taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment";
+
+      if (currentUser && currentUser.userId) {
+        // Save to MongoDB
+        const res = await fetch("http://localhost:3000/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: currentUser.userId,
+            title: sessionTitle,
+            taskDescription,
+            assignmentFileName,
+            cardData: data,
+            userCode: "",
+            evalFeedback: null
+          })
+        });
+        const savedSession = await res.json();
+        const sid = savedSession._id;
+        setCurrentSessionId(sid);
+
+        setHistory(prev => {
+          const newSession = {
+            id: sid,
+            title: sessionTitle,
+            taskDescription,
+            assignmentFileName,
+            cardData: data,
+            userCode: "",
+            evalFeedback: null,
+            timestamp: Date.now()
+          };
+          const exists = prev.some(item => item.id === sid);
+          if (exists) {
+            return prev.map(item => item.id === sid ? newSession : item);
+          }
+          return [newSession, ...prev];
+        });
+      } else {
+        // Guest mode - localStorage
+        let sid = currentSessionId;
+        if (!sid) {
+          sid = Date.now().toString();
+          setCurrentSessionId(sid);
         }
-      ]);
-    } catch (err) {
-      console.error("Error communicating with backend:", err);
-      setChatMessages(prev => [
-        ...prev,
-        {
-          id: Date.now(),
-          type: 'ai',
-          text: "Error: Could not connect to the backend server. Please verify that the backend is running at http://localhost:3000 and the GEMINI_API_KEY is configured in your backend .env file."
-        }
-      ]);
+
+        setHistory(prev => {
+          const exists = prev.some(item => item.id === sid);
+          let updated;
+          if (exists) {
+            updated = prev.map(item => item.id === sid ? {
+              ...item,
+              title: sessionTitle,
+              taskDescription,
+              assignmentFileName,
+              cardData: data,
+              timestamp: Date.now()
+            } : item);
+          } else {
+            const newSession = {
+              id: sid,
+              title: sessionTitle,
+              taskDescription,
+              assignmentFileName,
+              cardData: data,
+              userCode: "",
+              evalFeedback: null,
+              timestamp: Date.now()
+            };
+            updated = [newSession, ...prev];
+          }
+          localStorage.setItem("aico_chat_history", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch AI response:", error);
+      alert("Error generating content. Please check the backend server.");
+      setViewMode("assignment");
     } finally {
       setIsTyping(false);
     }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       handleSend();
     }
   };
 
-  const resetToWelcome = () => {
-    setViewMode("welcome");
-    setChatMessages([]);
+  const startNewSession = () => {
+    setCurrentSessionId(null);
+    setViewMode("assignment");
+    setTaskDescription("");
+    setBottomPrompt("");
+    setUserCode("");
+    setAssignmentFileName("");
+    setAssignmentFile(null);
+    setCodeFileName("");
+    setCardData(null);
+    setEvalFeedback(null);
     setShowCode(false);
+    setIsAssignmentExpanded(false);
     setIsTyping(false);
-    setCardData({
-      description: "Please enter a prompt to generate documentation.",
-      arguments: "No parameters defined.",
-      returnValues: "No return values defined.",
-      todo: "Checklist is empty.",
-      tips: "No implementation tips available.",
-      code: "// Press Reveal Code after prompt generation completes"
+    setIsSidebarOpen(false);
+  };
+
+  const loadSession = (session) => {
+    setCurrentSessionId(session.id);
+    setTaskDescription(session.taskDescription || "");
+    setBottomPrompt(session.bottomPrompt || "");
+    setUserCode(session.userCode || "");
+    setAssignmentFileName(session.assignmentFileName || "");
+    setAssignmentFile(null);
+    setCardData(session.cardData);
+    setEvalFeedback(session.evalFeedback || null);
+    setViewMode("review");
+    setIsSidebarOpen(false);
+  };
+
+  const deleteSession = async (id) => {
+    if (!confirm("Are you sure you want to delete this session?")) return;
+    
+    if (currentSessionId === id) {
+      startNewSession();
+    }
+
+    setHistory(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      if (!currentUser) {
+        localStorage.setItem("aico_chat_history", JSON.stringify(updated));
+      }
+      return updated;
     });
+
+    if (currentUser && currentUser.userId) {
+      try {
+        await fetch(`http://localhost:3000/api/sessions/${id}`, {
+          method: "DELETE"
+        });
+      } catch (err) {
+        console.error("Failed to delete session on server:", err);
+      }
+    }
+  };
+
+  const resetToWelcome = () => {
+    if (viewMode === "stats") {
+      setViewMode(cardData ? "review" : "assignment");
+      return;
+    }
+    setViewMode("assignment");
+    setTaskDescription("");
+    setBottomPrompt("");
+    setUserCode("");
+    setAssignmentFileName("");
+    setAssignmentFile(null);
+    setCodeFileName("");
+    setCardData(null);
+    setShowCode(false);
+    setIsAssignmentExpanded(false);
+    setIsTyping(false);
+  };
+
+  const handleCodeSubmit = async () => {
+    if (!userCode.trim()) return;
+    if (!currentUser) return alert("Please login first to submit code.");
+    try {
+      const res = await fetch("http://localhost:3000/api/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUser.userId, code: userCode, taskDescription })
+      });
+      const data = await res.json();
+      setEvalFeedback(data);
+      setExpandedCard({ title: `Evaluation: ${data.rating}`, content: <p>{data.feedback}</p> });
+    } catch (e) { console.error(e); }
+  };
+  
+  const handleReveal = async () => {
+    setShowCode(!showCode);
+    if (!showCode && currentUser) {
+      try {
+        await fetch("http://localhost:3000/api/reveal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUser.userId })
+        });
+      } catch (e) { console.error(e); }
+    }
+  };
+
+  const handleBottomPromptSend = () => {
+    if (!bottomPrompt.trim()) return;
+    setBottomPrompt("");
+  };
+
+  const handleAssignmentFile = (file) => {
+    if (!file) return;
+    setAssignmentFileName(file.name);
+    setAssignmentFile(file);
+  };
+
+  const handleCodeFile = (file) => {
+    if (!file) return;
+    setCodeFileName(file.name);
+    file.text().then(setUserCode).catch(() => {});
+  };
+
+  const preventDragDefaults = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   return (
     <div className="app-viewport">
-      {/* Top Left Menu Button (Reset / Welcome back button) */}
-      <button className="menu-btn" aria-label="Open menu" onClick={resetToWelcome}>
-        <img src={imgMenu} alt="Menu" />
-      </button>
+      {/* Sidebar Overlay & Drawer */}
+      <div 
+        className={`sidebar-overlay ${isSidebarOpen ? 'active' : ''}`} 
+        onClick={() => setIsSidebarOpen(false)} 
+      />
+      <div className={`sidebar-drawer ${isSidebarOpen ? 'active' : ''}`}>
+        <div className="sidebar-header">
+          <span className="sidebar-title">Aico Tutor Menu</span>
+          <button className="sidebar-close-btn" onClick={() => setIsSidebarOpen(false)}>×</button>
+        </div>
 
-      {/* Top Right Timer Widget - only rendered in Chat Mode */}
-      {viewMode === "chat" && (
-        <div className="timer-widget">
-          <img src={imgTimerBg} className="timer-widget-bg" alt="" />
-          <div className="timer-icon-group">
-            <img src={imgImage1} className="timer-img-1" alt="Clock" />
-            <img src={imgImage3} className="timer-img-3" alt="Arrow" />
+        <div className="sidebar-section">
+          <span className="sidebar-section-title">Navigation</span>
+          
+          {cardData && (
+            <button 
+              className="sidebar-btn primary"
+              onClick={() => {
+                setViewMode("review");
+                setIsSidebarOpen(false);
+              }}
+            >
+              💬 Return to Conversation
+            </button>
+          )}
+
+          <button 
+            className="sidebar-btn"
+            onClick={startNewSession}
+          >
+            ➕ Start New Session
+          </button>
+
+          <button 
+            className="sidebar-btn"
+            onClick={() => {
+              setViewMode("stats");
+              setIsSidebarOpen(false);
+            }}
+          >
+            📊 View Learning Stats
+          </button>
+        </div>
+
+        <div className="sidebar-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <span className="sidebar-section-title">Recent Conversations</span>
+          <div className="sidebar-history-list">
+            {history.length === 0 ? (
+              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', padding: '10px 0' }}>No saved conversation history.</p>
+            ) : (
+              history.map(item => (
+                <div 
+                  key={item.id} 
+                  className={`sidebar-history-item ${currentSessionId === item.id ? 'active' : ''}`}
+                  onClick={() => loadSession(item)}
+                  style={{ position: 'relative' }}
+                >
+                  <span className="sidebar-history-item-title" style={{ paddingRight: '24px' }}>{item.title}</span>
+                  <span className="sidebar-history-item-date">{new Date(item.timestamp).toLocaleString()}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteSession(item.id);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.4)',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      padding: '4px',
+                      zIndex: 10
+                    }}
+                    onMouseEnter={(e) => e.target.style.color = '#ff6b6b'}
+                    onMouseLeave={(e) => e.target.style.color = 'rgba(255, 255, 255, 0.4)'}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
+
+        <div className="sidebar-footer">
+          {history.length > 0 && (
+            <button 
+              className="sidebar-delete-history-btn"
+              onClick={async () => {
+                if (confirm("Are you sure you want to delete all conversation history?")) {
+                  setHistory([]);
+                  localStorage.removeItem("aico_chat_history");
+                  startNewSession();
+                  if (currentUser && currentUser.userId) {
+                    try {
+                      await fetch(`http://localhost:3000/api/sessions/clear/all?userId=${currentUser.userId}`, {
+                        method: "DELETE"
+                      });
+                    } catch (err) {
+                      console.error("Failed to clear sessions on server:", err);
+                    }
+                  }
+                }
+              }}
+            >
+              🗑️ Clear All History
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Top Left Menu Button (Open Sidebar) */}
+      <button className="menu-btn" aria-label="Open menu" onClick={() => setIsSidebarOpen(true)}>
+        <span aria-hidden="true"></span>
+      </button>
+
+      {/* Top Right Timer Widget */}
+      {viewMode !== "stats" && (
+        <button className="timer-widget" type="button" aria-label="Open statistics" onClick={() => setViewMode("stats")}>
+          <img src={imgClockWidgetBg} className="timer-widget-bg" alt="" />
+          <span className="timer-icon-group" aria-hidden="true">
+            <img src={imgClock} className="timer-img-1" alt="" />
+            <img src={imgClockArrow} className="timer-img-3" alt="" />
+          </span>
+        </button>
       )}
 
       {/* Content Layout Division */}
-      <div className="content-layout">
-        
-        {/* Welcome Mode Elements */}
-        {viewMode === "welcome" && (
-          <h1 className="main-title">
-            Hello, how may I help you today?
-          </h1>
+            <div style={{ position: 'absolute', top: 32, right: 230, zIndex: 120 }}>
+        {!currentUser ? (
+          <GoogleLogin onSuccess={handleLoginSuccess} onError={() => console.log("Login failed")} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
+            {currentUser.picture && <img src={currentUser.picture} alt="" style={{width: 24, borderRadius: '50%'}}/>}
+            <span>{currentUser.name || currentUser.email}</span>
+            <button
+              onClick={() => {
+                setCurrentUser(null);
+                localStorage.removeItem("currentUser");
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: 'none',
+                color: '#ff6b6b',
+                cursor: 'pointer',
+                fontSize: '11px',
+                marginLeft: '8px',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => e.target.style.background = 'rgba(255, 107, 107, 0.2)'}
+              onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
+            >
+              Logout
+            </button>
+          </div>
         )}
+      </div>
+      <div className="content-layout">
+        {(viewMode === "assignment" || viewMode === "processing") && (
+          <section className={`assignment-panel ${viewMode === "processing" ? "is-processing" : ""}`}>
+            <label
+              className="assignment-dropzone"
+              onDragEnter={preventDragDefaults}
+              onDragOver={preventDragDefaults}
+              onDrop={(e) => {
+                preventDragDefaults(e);
+                handleAssignmentFile(e.dataTransfer.files?.[0]);
+              }}
+            >
+              <img src={imgPaperclip} alt="" aria-hidden="true" />
+              <span>{assignmentFileName || "Upload your assignment"}</span>
+              <input
+                type="file"
+                className="visually-hidden-input"
+                onChange={(e) => handleAssignmentFile(e.target.files?.[0])}
+              />
+            </label>
 
-        {/* Chat Mode Elements (Scrollable Card Area) */}
-        {viewMode === "chat" && (
-          <div className="scroll-container" ref={scrollRef}>
-            <div className="cards-layout">
-              {/* Card 1: Description */}
-              <div className="figma-card full-card" style={{ height: 'auto', minHeight: '173px' }}>
-                <img src={imgExample2} className="card-texture" alt="" />
-                <h2 className="card-title">Description</h2>
-                <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
-                  {cardData.description}
-                </p>
-              </div>
+            <textarea
+              className="assignment-textarea"
+              placeholder="Type the task description"
+              value={taskDescription}
+              onChange={(e) => setTaskDescription(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isTyping}
+            />
 
-              {/* Row of two half-width cards */}
-              <div className="card-row">
-                {/* Card 2: Arguments */}
-                <div className="figma-card half-card" style={{ height: 'auto', minHeight: '254px' }}>
-                  <img src={imgExample2} className="card-texture" alt="" />
-                  <h2 className="card-title">Arguments</h2>
-                  <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
-                    {cardData.arguments}
-                  </p>
-                </div>
-                
-                {/* Card 3: Return values */}
-                <div className="figma-card half-card" style={{ height: 'auto', minHeight: '254px' }}>
-                  <img src={imgExample2} className="card-texture" alt="" />
-                  <h2 className="card-title">Return values</h2>
-                  <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
-                    {cardData.returnValues}
-                  </p>
-                </div>
-              </div>
+            <button className="assignment-send-btn send-btn" type="button" onClick={handleSend} aria-label="Send assignment" disabled={isTyping}>
+              <span aria-hidden="true"></span>
+            </button>
 
-              {/* Card 4: TO DO */}
-              <div className="figma-card full-card" style={{ height: 'auto', minHeight: '173px' }}>
-                <img src={imgExample2} className="card-texture" alt="" />
-                <h2 className="card-title">TO DO</h2>
-                <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
-                  {cardData.todo}
-                </p>
-              </div>
+            {viewMode === "processing" && (
+              <p className="assignment-status">AI is analyzing...</p>
+            )}
 
-              {/* Card 5: Tips */}
-              <div className="figma-card full-card" style={{ height: 'auto', minHeight: '173px' }}>
-                <img src={imgExample2} className="card-texture" alt="" />
-                <h2 className="card-title">Tips</h2>
-                <p style={{ marginTop: '12px', fontSize: '20px', lineHeight: 1.5, opacity: 0.9, zIndex: 2, position: 'relative', fontFamily: 'Poppins, sans-serif' }}>
-                  {cardData.tips}
-                </p>
-              </div>
-
-              {/* Interactive chat logs in screen flow */}
-              {chatMessages.map(msg => (
-                <div 
-                  key={msg.id} 
-                  className="figma-card full-card" 
-                  style={{ 
-                    height: 'auto', 
-                    minHeight: '120px', 
-                    borderColor: msg.type === 'user' ? '#ec83bb' : '#cad6e8',
-                    boxShadow: msg.type === 'user' ? '0px 4px 20px 0px rgba(236,131,187,0.2)' : '0px 4px 20px 0px rgba(91,71,188,0.3)'
+            {cardData && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 15, width: '100%' }}>
+                <button 
+                  type="button"
+                  onClick={() => setViewMode("review")}
+                  style={{
+                    flex: 1,
+                    background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    transition: 'opacity 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.opacity = 0.9}
+                  onMouseLeave={(e) => e.target.style.opacity = 1}
+                >
+                  Return to Conversation
+                </button>
+                <button 
+                  type="button"
+                  onClick={startNewSession}
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: '#ccc',
+                    cursor: 'pointer',
+                    padding: '12px 18px',
+                    borderRadius: '8px',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'rgba(255, 107, 107, 0.15)';
+                    e.target.style.color = '#ff6b6b';
+                    e.target.style.borderColor = 'rgba(255, 107, 107, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(255,255,255,0.08)';
+                    e.target.style.color = '#ccc';
+                    e.target.style.borderColor = 'rgba(255,255,255,0.15)';
                   }}
                 >
-                  <img src={imgExample2} className="card-texture" alt="" />
-                  <div style={{ position: 'relative', zIndex: 2 }}>
-                    <span style={{ fontSize: '14px', color: msg.type === 'user' ? '#ec83bb' : '#cad6e8', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
-                      {msg.type === 'user' ? 'YOU' : 'AI'}
-                    </span>
-                    <p style={{ fontSize: '20px', lineHeight: 1.5 }}>{msg.text}</p>
+                  New Session
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {viewMode === "review" && (
+          <div className="scroll-container review-scroll">
+            <section className="cards-layout review-cards-layout">
+              <div className="assignment-message-row">
+                <div className={`assignment-message ${isAssignmentExpanded ? "expanded" : ""}`}>
+                  {assignmentFileName && (
+                    <span className="assignment-message-file">{assignmentFileName}</span>
+                  )}
+                  <p>{taskDescription || "Uploaded assignment"}</p>
+                  {taskDescription.length > 120 && (
+                    <button type="button" onClick={() => setIsAssignmentExpanded(prev => !prev)}>
+                      {isAssignmentExpanded ? "Show less" : "Show more"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Description', content: <p className="card-content-text">{cardData.description}</p> })}>
+                <h2 className="card-title">Description</h2>
+                {cardData && <p className="card-content-text">{cardData.description}</p>}
+              </div>
+
+              <div className="card-row">
+                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Arguments', content: <p className="card-content-text">{cardData.arguments}</p> })}>
+                  <h2 className="card-title">Arguments</h2>
+                  {cardData && <p className="card-content-text">{cardData.arguments}</p>}
+                </div>
+                
+                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Return values', content: <p className="card-content-text">{cardData.returnValues}</p> })}>
+                  <h2 className="card-title">Return values</h2>
+                  {cardData && <p className="card-content-text">{cardData.returnValues}</p>}
+                </div>
+              </div>
+
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'TO DO', content: parseTodoText(cardData.todo) })}>
+                <h2 className="card-title">TO DO</h2>
+                {cardData && parseTodoText(cardData.todo)}
+              </div>
+
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Tips', content: <p className="card-content-text">{cardData.tips}</p> })}>
+                <h2 className="card-title">Tips</h2>
+                {cardData && <p className="card-content-text">{cardData.tips}</p>}
+              </div>
+
+              <div className="review-workspace">
+                <div className="review-column">
+                  <div className="figma-card reveal-card review-reveal-card">
+                    
+                    
+                    <button className="reveal-btn" onClick={handleReveal}>
+                      <img src={imgRectangle3} className="reveal-btn-bg" alt="" />
+                      <span className="reveal-btn-text">
+                        {showCode ? "Hide code" : "Reveal AI code"}
+                      </span>
+                    </button>
+
+                    {showCode && (
+                      <pre className="code-content-box">
+                        {cardData ? cardData.code : "// No code generated"}
+                      </pre>
+                    )}
                   </div>
                 </div>
-              ))}
 
-              {isTyping && (
-                <div className="figma-card full-card" style={{ height: 'auto', minHeight: '100px' }}>
-                  <img src={imgExample2} className="card-texture" alt="" />
-                  <p style={{ fontSize: '18px', fontStyle: 'italic', opacity: 0.7, position: 'relative', zIndex: 2 }}>
-                    AI is analyzing...
-                  </p>
+                <div className="review-column">
+                  <div className="figma-card user-code-card">
+                    
+                    <div className="user-code-header">
+                      <h2 className="card-title">Your code</h2>
+                      <label className="clip-btn code-upload-btn" aria-label="Upload code file">
+                        <img src={imgPaperclip} alt="" aria-hidden="true" />
+                        <input
+                          type="file"
+                          className="visually-hidden-input"
+                          accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.html,.css,.json,.txt"
+                          onChange={(e) => handleCodeFile(e.target.files?.[0])}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="code-editor-shell">
+                      <div className="editor-topbar">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <small>{codeFileName || "solution.jsx"}</small>
+                      </div>
+                      <div
+                        className="editor-body"
+                        onDragEnter={preventDragDefaults}
+                        onDragOver={preventDragDefaults}
+                        onDrop={(e) => {
+                          preventDragDefaults(e);
+                          handleCodeFile(e.dataTransfer.files?.[0]);
+                        }}
+                      >
+                        <div className="editor-lines" aria-hidden="true">
+                          {Array.from({ length: 14 }, (_, idx) => <span key={idx}>{idx + 1}</span>)}
+                        </div>
+                        <textarea
+                          className="code-editor-input"
+                          placeholder="Type in the code..."
+                          value={userCode}
+                          onChange={(e) => setUserCode(e.target.value)}
+                          spellCheck="false"
+                        />
+                      </div>
+                    </div>
+
+                    <button className="primary-submit-btn" type="button" onClick={handleCodeSubmit}>
+                      Submit for review
+                    </button>
+                  </div>
                 </div>
-              )}
+              </div>
+            </section>
+          </div>
+        )}
 
-              {/* Card 6: Reveal code card (Interactive) */}
-              <div className="figma-card reveal-card">
-                <img src={imgExample2} className="card-texture" alt="" />
+        {viewMode === "stats" && (
+          <div className="stats-container">
+            <h1 className="analytics-title">Analytics</h1>
+            <div className="stats-layout">
+              <div className="figma-card stats-card reveal-stats-card">
                 
-                <button className="reveal-btn" onClick={() => setShowCode(!showCode)}>
-                  <img src={imgRectangle3} className="reveal-btn-bg" alt="" />
-                  <span className="reveal-btn-text">
-                    {showCode ? "Hide code" : "Reveal code"}
-                  </span>
-                </button>
+                <div className="compact-card-content">
+                  <div className="score-card-header">
+                    <h2 className="stats-title">Reveals this {selectedStat.label}</h2>
+                    <div className="score-range-controls" aria-label="Reveal code range">
+                      {STATS_OPTIONS.map(option => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
+                          onClick={() => setStatsRange(option.key)}
+                          aria-label={option.label}
+                          aria-pressed={statsRange === option.key}
+                        >
+                          {option.key}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="stats-value">{totalReveals}</div>
+                </div>
+              </div>
 
-                {showCode && (
-                  <pre className="code-content-box" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    {cardData.code}
-                  </pre>
-                )}
+              <div className="figma-card stats-card score-card">
+                
+                <div className="score-card-content">
+                  <div className="score-card-header">
+                    <div>
+                      <h2 className="score-title">Score ratings</h2>
+                    </div>
+                    <div className="score-range-controls" aria-label="Score rating range">
+                      {STATS_OPTIONS.map(option => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
+                          onClick={() => setStatsRange(option.key)}
+                          aria-label={option.label}
+                          aria-pressed={statsRange === option.key}
+                        >
+                          {option.key}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="score-chart-row">
+                    <div
+                      className="score-chart"
+                      style={{
+                        "--red": `${redPercent}%`,
+                        "--yellow": `${yellowPercent}%`,
+                      }}
+                      aria-label={`Bad ${redPercent}%, mid ${yellowPercent}%, good ${greenPercent}%`}
+                    >
+                      <div className="score-chart-center">
+                        <span>{ratingTotal}</span>
+                        <small>{selectedStat.label}</small>
+                      </div>
+                    </div>
+
+                    <div className="score-scale">
+                      <div className="score-scale-item bad">
+                        <span></span>
+                        <strong>{selectedRatings.red}</strong>
+                        <small>Bad</small>
+                      </div>
+                      <div className="score-scale-item mid">
+                        <span></span>
+                        <strong>{selectedRatings.yellow}</strong>
+                        <small>Mid</small>
+                      </div>
+                      <div className="score-scale-item good">
+                        <span></span>
+                        <strong>{selectedRatings.green}</strong>
+                        <small>Good</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="figma-card stats-card bar-card">
+                
+                <div className="bar-card-content">
+                  <div className="score-card-header">
+                    <div>
+                      <h2 className="score-title">Reveals history</h2>
+                    </div>
+                    <div className="score-range-controls" aria-label="Reveal history range">
+                      {STATS_OPTIONS.map(option => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
+                          onClick={() => setStatsRange(option.key)}
+                          aria-label={option.label}
+                          aria-pressed={statsRange === option.key}
+                        >
+                          {option.key}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bar-chart-shell">
+                    <div className="bar-y-axis" aria-hidden="true">
+                      {[maxHistoryValue, Math.round(maxHistoryValue * 0.75), Math.round(maxHistoryValue * 0.5), Math.round(maxHistoryValue * 0.25), 0].map((value, index) => (
+                        <span key={`${value}-${index}`}>{value}</span>
+                      ))}
+                    </div>
+                    <div className={`bar-chart range-${statsRange.toLowerCase()}`}>
+                      {selectedHistory.map(item => (
+                        <div className="bar-item" key={item.label}>
+                          <div className="bar-value">{item.value}</div>
+                          <div className="bar-track">
+                            <span style={{ height: `${Math.max((item.value / maxHistoryValue) * 100, 5)}%` }}></span>
+                          </div>
+                          <div className="bar-label">{item.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Floating Prompt Bar (Transitions depending on welcome / chat layout) */}
-        <div className={`prompt-bar-wrapper ${viewMode === "welcome" ? "welcome-mode" : "chat-mode"}`}>
-          <div className="prompt-bar">
-            {/* Flat Clip Button */}
-            <button className="clip-btn" aria-label="Attach file">
-              <img src={imgClip} alt="Clip" />
-            </button>
+        {viewMode !== "assignment" && viewMode !== "stats" && (
+          <div className="compact-prompt-wrapper">
+            <div className="prompt-bar compact-prompt-bar">
+              <label className="clip-btn compact-prompt-clip" aria-label="Attach file">
+                <img src={imgPaperclip} alt="" aria-hidden="true" />
+                <input
+                  type="file"
+                  className="visually-hidden-input"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (viewMode === "review") {
+                      handleCodeFile(file);
+                    } else {
+                      handleAssignmentFile(file);
+                    }
+                  }}
+                />
+              </label>
 
-            {/* Search Input Field */}
-            <div className="prompt-left-group">
-              <input
-                type="text"
-                className="prompt-input"
-                placeholder="Ask a question"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isTyping}
-              />
+              <div className="prompt-left-group compact-prompt-input-wrap">
+                <input
+                  type="text"
+                  className="prompt-input compact-prompt-input"
+                  placeholder="Add a note"
+                  value={bottomPrompt}
+                  onChange={(e) => setBottomPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleBottomPromptSend();
+                    }
+                  }}
+                  disabled={isTyping}
+                />
+              </div>
+
+              <button className="send-btn compact-prompt-send" type="button" onClick={handleBottomPromptSend} aria-label="Send note" disabled={isTyping}>
+                <span aria-hidden="true"></span>
+              </button>
             </div>
+          </div>
+        )}
 
-            {/* Send Button */}
-            <button className="send-btn" onClick={handleSend} aria-label="Send message" disabled={isTyping}>
-              <img src={imgSend} alt="Send" />
-            </button>
+      </div>
+
+      {expandedCard && (
+        <div className="modal-overlay" onClick={() => setExpandedCard(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-btn" onClick={() => setExpandedCard(null)}>×</button>
+            <h2 className="modal-title">{expandedCard.title}</h2>
+            <div className="modal-body">
+              {expandedCard.content}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
