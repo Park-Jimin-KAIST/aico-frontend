@@ -101,6 +101,7 @@ function App() {
   const [pendingNewAssignmentFile, setPendingNewAssignmentFile] = useState(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [history, setHistory] = useState([]);
 
@@ -136,6 +137,17 @@ function App() {
       localStorage.setItem("aico_chat_history", JSON.stringify(history));
     }
   }, [history, currentUser]);
+
+  // Handle ESC key to close code modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isCodeModalOpen) {
+        setIsCodeModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCodeModalOpen]);
 
   // Debounced API call / localStorage save for code/feedback/prompt changes
   useEffect(() => {
@@ -1013,7 +1025,13 @@ function App() {
                       </label>
                     </div>
 
-                    <div className="code-editor-shell">
+                    {isCodeModalOpen && <div className="code-modal-overlay" onClick={() => setIsCodeModalOpen(false)} />}
+                    <div 
+                      className={`code-editor-shell ${isCodeModalOpen ? 'fullscreen' : ''}`}
+                      onClick={() => {
+                        if (!isCodeModalOpen) setIsCodeModalOpen(true);
+                      }}
+                    >
                       <div className="editor-topbar">
                         <span></span>
                         <span></span>

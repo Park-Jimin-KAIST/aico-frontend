@@ -492,6 +492,30 @@ body, html, #root {
   border-radius: 12px;
   background: #1e1e1e;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  transition: all 0.3s ease;
+}
+
+.code-editor-shell.fullscreen {
+  position: fixed;
+  top: 5vh;
+  left: 5vw;
+  width: 90vw;
+  height: 90vh;
+  z-index: 9999;
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(236, 131, 187, 0.6);
+  cursor: default;
+}
+
+.code-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 9998;
+  backdrop-filter: blur(6px);
 }
 
 .editor-topbar {
