@@ -3,6 +3,24 @@ import { GoogleLogin } from '@react-oauth/google'
 import { jwtDecode } from 'jwt-decode'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import Editor from '@monaco-editor/react'
+
+const getLanguageFromFilename = (filename) => {
+  if (!filename) return 'javascript';
+  const ext = filename.split('.').pop().toLowerCase();
+  switch(ext) {
+    case 'py': return 'python';
+    case 'js': case 'jsx': return 'javascript';
+    case 'ts': case 'tsx': return 'typescript';
+    case 'java': return 'java';
+    case 'c': case 'cpp': return 'cpp';
+    case 'cs': return 'csharp';
+    case 'html': return 'html';
+    case 'css': return 'css';
+    case 'json': return 'json';
+    default: return 'javascript';
+  }
+};
 
 // Assets from local figma mcp server
 const imgExample2 = "http://localhost:3845/assets/5ba0970993e0ba180516990dd8a51489631d4d02.png";
@@ -1000,10 +1018,17 @@ function App() {
                         <span></span>
                         <span></span>
                         <span></span>
-                        <small>{codeFileName || "solution.jsx"}</small>
+                        <input
+                          type="text"
+                          className="filename-input"
+                          value={codeFileName || assignmentFileName || "solution.jsx"}
+                          onChange={(e) => setCodeFileName(e.target.value)}
+                          spellCheck="false"
+                        />
                       </div>
                       <div
-                        className="editor-body"
+                        className="editor-body monaco-wrapper"
+                        style={{ height: 'calc(100% - 38px)', width: '100%' }}
                         onDragEnter={preventDragDefaults}
                         onDragOver={preventDragDefaults}
                         onDrop={(e) => {
@@ -1011,16 +1036,21 @@ function App() {
                           handleCodeFile(e.dataTransfer.files?.[0]);
                         }}
                       >
-                        <div className="editor-lines" aria-hidden="true">
-                          {Array.from({ length: 14 }, (_, idx) => <span key={idx}>{idx + 1}</span>)}
-                        </div>
-                        <textarea
-                          className="code-editor-input"
-                          placeholder="Type in the code..."
+                        <Editor
+                          height="100%"
+                          language={getLanguageFromFilename(codeFileName || assignmentFileName || "solution.jsx")}
+                          theme="vs-dark"
                           value={userCode}
-                          onChange={(e) => setUserCode(e.target.value)}
-                          spellCheck="false"
-                          wrap="off"
+                          onChange={(value) => setUserCode(value || '')}
+                          options={{
+                            minimap: { enabled: false },
+                            fontSize: 14,
+                            wordWrap: 'on',
+                            lineNumbers: 'on',
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            padding: { top: 16, bottom: 16 }
+                          }}
                         />
                       </div>
                     </div>

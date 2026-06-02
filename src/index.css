@@ -520,6 +520,23 @@ body, html, #root {
   background: #6ee7a2;
 }
 
+.filename-input {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+  transition: border-color 0.2s, background 0.2s;
+  width: 200px;
+}
+.filename-input:hover, .filename-input:focus {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
 .editor-topbar small {
   margin-left: 10px;
   color: rgba(202, 214, 232, 0.72);
@@ -803,7 +820,8 @@ pre::-webkit-scrollbar-thumb:hover {
 /* Specific Card Layout Dimensions */
 .full-card {
   width: 100%;
-  height: 173px;
+  min-height: 173px;
+  height: auto;
 }
 
 .card-row {
