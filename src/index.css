@@ -931,8 +931,6 @@ pre::-webkit-scrollbar-thumb:hover {
 
 .reveal-stats-card {
   min-width: 0;
-  min-height: 320px;
-  align-self: start;
   border-color: rgba(236, 131, 187, 0.9);
   background:
     radial-gradient(circle at 30% 18%, rgba(236, 131, 187, 0.3), transparent 38%),
@@ -947,11 +945,10 @@ pre::-webkit-scrollbar-thumb:hover {
   position: relative;
   z-index: 2;
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   align-items: stretch;
-  min-height: 236px;
 }
 
 .stats-kicker {
@@ -978,8 +975,28 @@ pre::-webkit-scrollbar-thumb:hover {
   line-height: 1;
   color: #ffffff;
   text-align: center;
-  text-shadow: 0 0 34px rgba(236, 131, 187, 0.62);
-  margin-top: 28px;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.reveal-status-text {
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  margin-top: auto;
+}
+
+.reveal-status-text.good {
+  color: #81f7ba;
+}
+
+.reveal-status-text.average {
+  color: #ffd166;
+}
+
+.reveal-status-text.bad {
+  color: #ff6b6b;
 }
 
 .score-card {

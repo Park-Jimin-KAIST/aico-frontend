@@ -646,13 +646,11 @@ function App() {
       />
       <div className={`sidebar-drawer ${isSidebarOpen ? 'active' : ''}`}>
         <div className="sidebar-header">
-          <span className="sidebar-title">Aico Tutor Menu</span>
+          <span className="sidebar-title">AICO Tutor Menu</span>
           <button className="sidebar-close-btn" onClick={() => setIsSidebarOpen(false)}>×</button>
         </div>
 
         <div className="sidebar-section">
-          <span className="sidebar-section-title">Navigation</span>
-          
           {cardData && (
             <button 
               className="sidebar-btn primary"
@@ -726,6 +724,30 @@ function App() {
               ))
             )}
           </div>
+          {history.length > 0 && (
+            <button 
+              className="sidebar-delete-history-btn"
+              style={{ marginTop: '12px' }}
+              onClick={async () => {
+                if (confirm("Are you sure you want to delete all conversation history?")) {
+                  setHistory([]);
+                  localStorage.removeItem("aico_chat_history");
+                  startNewSession();
+                  if (currentUser && currentUser.userId) {
+                    try {
+                      await fetch(`http://localhost:3000/api/sessions/clear/all?userId=${currentUser.userId}`, {
+                        method: "DELETE"
+                      });
+                    } catch (err) {
+                      console.error("Failed to clear sessions on server:", err);
+                    }
+                  }
+                }
+              }}
+            >
+              🗑️ Clear All History
+            </button>
+          )}
         </div>
 
         <div className="sidebar-footer">
@@ -761,30 +783,6 @@ function App() {
               </div>
             )}
           </div>
-          
-          {history.length > 0 && (
-            <button 
-              className="sidebar-delete-history-btn"
-              onClick={async () => {
-                if (confirm("Are you sure you want to delete all conversation history?")) {
-                  setHistory([]);
-                  localStorage.removeItem("aico_chat_history");
-                  startNewSession();
-                  if (currentUser && currentUser.userId) {
-                    try {
-                      await fetch(`http://localhost:3000/api/sessions/clear/all?userId=${currentUser.userId}`, {
-                        method: "DELETE"
-                      });
-                    } catch (err) {
-                      console.error("Failed to clear sessions on server:", err);
-                    }
-                  }
-                }
-              }}
-            >
-              🗑️ Clear All History
-            </button>
-          )}
         </div>
       </div>
 
@@ -1062,6 +1060,9 @@ function App() {
                     </div>
                   </div>
                   <div className="stats-value">{totalReveals}</div>
+                  <div className={`reveal-status-text ${totalReveals <= 3 ? 'good' : totalReveals <= 4 ? 'average' : 'bad'}`}>
+                    {totalReveals <= 3 ? "괜찮은 수치네요!" : totalReveals <= 4 ? "평균적인 수준입니다." : "평균보다 너무 많아요!"}
+                  </div>
                 </div>
               </div>
 
@@ -1171,7 +1172,7 @@ function App() {
           </div>
         )}
 
-        {viewMode !== "assignment" && viewMode !== "stats" && (
+        {viewMode === "review" && (
           <div className="compact-prompt-wrapper">
             <div className="prompt-bar compact-prompt-bar">
               <label className="clip-btn compact-prompt-clip" aria-label="Attach file">
