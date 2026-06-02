@@ -100,6 +100,8 @@ function App() {
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [pendingNewAssignmentFile, setPendingNewAssignmentFile] = useState(null);
   const [editorHeight, setEditorHeight] = useState(100);
+  const [revealedPages, setRevealedPages] = useState(new Set());
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
@@ -544,6 +546,7 @@ function App() {
   const handleCodeSubmit = async () => {
     if (!userCode.trim()) return;
     if (!currentUser) return alert("Please login first to submit code.");
+    setIsEvaluating(true);
     try {
       const res = await fetch("http://localhost:3000/api/evaluate", {
         method: "POST",
@@ -554,18 +557,23 @@ function App() {
       setEvalFeedback(data);
       setExpandedCard({ title: `Evaluation: ${data.rating}`, content: <p className="card-content-text">{data.feedback}</p> });
     } catch (e) { console.error(e); }
+    setIsEvaluating(false);
   };
   
   const handleReveal = async () => {
     setShowCode(!showCode);
     if (!showCode && currentUser) {
-      try {
-        await fetch("http://localhost:3000/api/reveal", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: currentUser.userId })
-        });
-      } catch (e) { console.error(e); }
+      const pageKey = `${currentSessionId}-${currentPageIndex}`;
+      if (!revealedPages.has(pageKey)) {
+        setRevealedPages(prev => new Set([...prev, pageKey]));
+        try {
+          await fetch("http://localhost:3000/api/reveal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: currentUser.userId })
+          });
+        } catch (e) { console.error(e); }
+      }
     }
   };
 
@@ -1085,9 +1093,21 @@ function App() {
                       </div>
                     </div>
 
-                    <button className="primary-submit-btn" type="button" onClick={handleCodeSubmit}>
-                      Submit for review
+                    <button 
+                      className="primary-submit-btn" 
+                      type="button" 
+                      onClick={handleCodeSubmit}
+                      disabled={isEvaluating}
+                      style={{ opacity: isEvaluating ? 0.6 : 1, cursor: isEvaluating ? 'not-allowed' : 'pointer' }}
+                    >
+                      {isEvaluating ? "AI is evaluating ..." : "Submit for review"}
                     </button>
+                    {evalFeedback && (
+                      <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', border: '1px solid rgba(236, 131, 187, 0.3)' }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: '#ec83bb', fontSize: '16px', fontWeight: '600' }}>Evaluation: {evalFeedback.rating}</h3>
+                        <p style={{ margin: 0, color: '#e2e8f0', fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{evalFeedback.feedback}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
