@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { GoogleLogin } from '@react-oauth/google'
+import { jwtDecode } from 'jwt-decode'
 
 // Assets from local figma mcp server
 const imgExample2 = "http://localhost:3845/assets/5ba0970993e0ba180516990dd8a51489631d4d02.png";
@@ -58,20 +60,150 @@ function App() {
   const [bottomPrompt, setBottomPrompt] = useState("");
   const [userCode, setUserCode] = useState("");
   const [assignmentFileName, setAssignmentFileName] = useState("");
+  const [assignmentFile, setAssignmentFile] = useState(null);
   const [codeFileName, setCodeFileName] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [isAssignmentExpanded, setIsAssignmentExpanded] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [statsRange, setStatsRange] = useState("W");
+  const [cardData, setCardData] = useState(null);
+  const [expandedCard, setExpandedCard] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem("currentUser");
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Error parsing saved user:", e);
+      return null;
+    }
+  });
+  const [statsData, setStatsData] = useState(null);
+  const [evalFeedback, setEvalFeedback] = useState(null);
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [history, setHistory] = useState([]);
+
+  // Fetch history when user logs in/out
+  useEffect(() => {
+    if (currentUser && currentUser.userId) {
+      fetch(`http://localhost:3000/api/sessions?userId=${currentUser.userId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            const mapped = data.map(item => ({
+              ...item,
+              id: item._id, // map MongoDB _id to frontend id
+              timestamp: new Date(item.updatedAt).getTime() // map updatedAt to timestamp
+            }));
+            setHistory(mapped);
+          }
+        })
+        .catch(console.error);
+    } else {
+      const saved = localStorage.getItem("aico_chat_history");
+      try {
+        setHistory(saved ? JSON.parse(saved) : []);
+      } catch (e) {
+        setHistory([]);
+      }
+    }
+  }, [currentUser]);
+
+  // Save guest history to localStorage
+  useEffect(() => {
+    if (!currentUser && history.length > 0) {
+      localStorage.setItem("aico_chat_history", JSON.stringify(history));
+    }
+  }, [history, currentUser]);
+
+  // Debounced API call / localStorage save for code/feedback/prompt changes
+  useEffect(() => {
+    if (!currentSessionId) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      const sessionData = {
+        title: taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment",
+        taskDescription,
+        assignmentFileName,
+        cardData,
+        userCode,
+        evalFeedback,
+        timestamp: Date.now()
+      };
+
+      // 1. Update React state
+      setHistory(prev => {
+        return prev.map(item => {
+          if (item.id === currentSessionId) {
+            return { ...item, ...sessionData };
+          }
+          return item;
+        });
+      });
+
+      // 2. Update MongoDB if logged in
+      if (currentUser && currentUser.userId) {
+        fetch(`http://localhost:3000/api/sessions/${currentSessionId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sessionData)
+        }).catch(console.error);
+      }
+    }, 1000); // 1s debounce
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [userCode, evalFeedback, cardData, taskDescription, assignmentFileName, currentSessionId, currentUser]);
+
+  useEffect(() => {
+    if (viewMode === "stats" && currentUser) {
+      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${statsRange}`)
+        .then(res => res.json())
+        .then(data => setStatsData(data))
+        .catch(console.error);
+    }
+  }, [viewMode, statsRange, currentUser]);
+  
+  const handleLoginSuccess = async (credentialResponse) => {
+    try {
+      const res = await fetch("http://localhost:3000/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: credentialResponse.credential })
+      });
+      const data = await res.json();
+      setCurrentUser(data);
+      localStorage.setItem("currentUser", JSON.stringify(data));
+    } catch (e) {
+      const decoded = jwtDecode(credentialResponse.credential);
+      const mockUser = { userId: "mock-id-123", name: decoded.name, picture: decoded.picture };
+      setCurrentUser(mockUser);
+      localStorage.setItem("currentUser", JSON.stringify(mockUser));
+    }
+  };
+
+  const parseTodoText = (text) => {
+    if (!text) return null;
+    const steps = text.split(/(?=Step \d+:)/).filter(s => s.trim() !== "");
+    if (steps.length === 1) return <p className="card-content-text">{text}</p>;
+    return (
+      <ul className="todo-list">
+        {steps.map((step, idx) => (
+          <li key={idx} className="todo-list-item">{step.trim()}</li>
+        ))}
+      </ul>
+    );
+  };
 
   const selectedStat = STATS_OPTIONS.find(option => option.key === statsRange) ?? STATS_OPTIONS[0];
-  const selectedRatings = SCORE_RATINGS[statsRange];
+  const selectedRatings = statsData ? statsData.scoreRatings : { red: 0, yellow: 0, green: 0 };
   const ratingTotal = selectedRatings.red + selectedRatings.yellow + selectedRatings.green;
-  const redPercent = Math.round((selectedRatings.red / ratingTotal) * 100);
-  const yellowPercent = Math.round((selectedRatings.yellow / ratingTotal) * 100);
-  const greenPercent = 100 - redPercent - yellowPercent;
-  const selectedHistory = REVEAL_HISTORY[statsRange];
-  const maxHistoryValue = Math.max(...selectedHistory.map(item => item.value));
+  const redPercent = ratingTotal ? Math.round((selectedRatings.red / ratingTotal) * 100) : 0;
+  const yellowPercent = ratingTotal ? Math.round((selectedRatings.yellow / ratingTotal) * 100) : 0;
+  const greenPercent = ratingTotal ? 100 - redPercent - yellowPercent : 0;
+  const selectedHistory = statsData?.history || [];
+  const maxHistoryValue = selectedHistory.length > 0 ? Math.max(...selectedHistory.map(item => item.value)) : 10;
+  const totalReveals = statsData?.totalReveals || 0;
 
   const handleSend = () => {
     if ((!taskDescription.trim() && !assignmentFileName) || isTyping) return;
@@ -79,12 +211,123 @@ function App() {
     triggerAIReply();
   };
 
-  const triggerAIReply = () => {
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+
+  const triggerAIReply = async () => {
     setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
+    try {
+      let fileData = null;
+      let fileMimeType = null;
+      if (assignmentFile) {
+        const base64String = await fileToBase64(assignmentFile);
+        fileData = base64String.split(",")[1];
+        fileMimeType = assignmentFile.type;
+      }
+
+      const response = await fetch("http://localhost:3000/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: taskDescription,
+          file: fileData ? { data: fileData, mimeType: fileMimeType } : null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setCardData(data);
       setViewMode("review");
-    }, 1500);
+
+      const sessionTitle = taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment";
+
+      if (currentUser && currentUser.userId) {
+        // Save to MongoDB
+        const res = await fetch("http://localhost:3000/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: currentUser.userId,
+            title: sessionTitle,
+            taskDescription,
+            assignmentFileName,
+            cardData: data,
+            userCode: "",
+            evalFeedback: null
+          })
+        });
+        const savedSession = await res.json();
+        const sid = savedSession._id;
+        setCurrentSessionId(sid);
+
+        setHistory(prev => {
+          const newSession = {
+            id: sid,
+            title: sessionTitle,
+            taskDescription,
+            assignmentFileName,
+            cardData: data,
+            userCode: "",
+            evalFeedback: null,
+            timestamp: Date.now()
+          };
+          const exists = prev.some(item => item.id === sid);
+          if (exists) {
+            return prev.map(item => item.id === sid ? newSession : item);
+          }
+          return [newSession, ...prev];
+        });
+      } else {
+        // Guest mode - localStorage
+        let sid = currentSessionId;
+        if (!sid) {
+          sid = Date.now().toString();
+          setCurrentSessionId(sid);
+        }
+
+        setHistory(prev => {
+          const exists = prev.some(item => item.id === sid);
+          let updated;
+          if (exists) {
+            updated = prev.map(item => item.id === sid ? {
+              ...item,
+              title: sessionTitle,
+              taskDescription,
+              assignmentFileName,
+              cardData: data,
+              timestamp: Date.now()
+            } : item);
+          } else {
+            const newSession = {
+              id: sid,
+              title: sessionTitle,
+              taskDescription,
+              assignmentFileName,
+              cardData: data,
+              userCode: "",
+              evalFeedback: null,
+              timestamp: Date.now()
+            };
+            updated = [newSession, ...prev];
+          }
+          localStorage.setItem("aico_chat_history", JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch AI response:", error);
+      alert("Error generating content. Please check the backend server.");
+      setViewMode("assignment");
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -93,20 +336,106 @@ function App() {
     }
   };
 
-  const resetToWelcome = () => {
+  const startNewSession = () => {
+    setCurrentSessionId(null);
     setViewMode("assignment");
     setTaskDescription("");
     setBottomPrompt("");
     setUserCode("");
     setAssignmentFileName("");
+    setAssignmentFile(null);
     setCodeFileName("");
+    setCardData(null);
+    setEvalFeedback(null);
+    setShowCode(false);
+    setIsAssignmentExpanded(false);
+    setIsTyping(false);
+    setIsSidebarOpen(false);
+  };
+
+  const loadSession = (session) => {
+    setCurrentSessionId(session.id);
+    setTaskDescription(session.taskDescription || "");
+    setBottomPrompt(session.bottomPrompt || "");
+    setUserCode(session.userCode || "");
+    setAssignmentFileName(session.assignmentFileName || "");
+    setAssignmentFile(null);
+    setCardData(session.cardData);
+    setEvalFeedback(session.evalFeedback || null);
+    setViewMode("review");
+    setIsSidebarOpen(false);
+  };
+
+  const deleteSession = async (id) => {
+    if (!confirm("Are you sure you want to delete this session?")) return;
+    
+    if (currentSessionId === id) {
+      startNewSession();
+    }
+
+    setHistory(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      if (!currentUser) {
+        localStorage.setItem("aico_chat_history", JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    if (currentUser && currentUser.userId) {
+      try {
+        await fetch(`http://localhost:3000/api/sessions/${id}`, {
+          method: "DELETE"
+        });
+      } catch (err) {
+        console.error("Failed to delete session on server:", err);
+      }
+    }
+  };
+
+  const resetToWelcome = () => {
+    if (viewMode === "stats") {
+      setViewMode(cardData ? "review" : "assignment");
+      return;
+    }
+    setViewMode("assignment");
+    setTaskDescription("");
+    setBottomPrompt("");
+    setUserCode("");
+    setAssignmentFileName("");
+    setAssignmentFile(null);
+    setCodeFileName("");
+    setCardData(null);
     setShowCode(false);
     setIsAssignmentExpanded(false);
     setIsTyping(false);
   };
 
-  const handleCodeSubmit = () => {
+  const handleCodeSubmit = async () => {
     if (!userCode.trim()) return;
+    if (!currentUser) return alert("Please login first to submit code.");
+    try {
+      const res = await fetch("http://localhost:3000/api/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUser.userId, code: userCode, taskDescription })
+      });
+      const data = await res.json();
+      setEvalFeedback(data);
+      setExpandedCard({ title: `Evaluation: ${data.rating}`, content: <p>{data.feedback}</p> });
+    } catch (e) { console.error(e); }
+  };
+  
+  const handleReveal = async () => {
+    setShowCode(!showCode);
+    if (!showCode && currentUser) {
+      try {
+        await fetch("http://localhost:3000/api/reveal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUser.userId })
+        });
+      } catch (e) { console.error(e); }
+    }
   };
 
   const handleBottomPromptSend = () => {
@@ -117,6 +446,7 @@ function App() {
   const handleAssignmentFile = (file) => {
     if (!file) return;
     setAssignmentFileName(file.name);
+    setAssignmentFile(file);
   };
 
   const handleCodeFile = (file) => {
@@ -132,8 +462,124 @@ function App() {
 
   return (
     <div className="app-viewport">
-      {/* Top Left Menu Button (Reset / Welcome back button) */}
-      <button className="menu-btn" aria-label="Open menu" onClick={resetToWelcome}>
+      {/* Sidebar Overlay & Drawer */}
+      <div 
+        className={`sidebar-overlay ${isSidebarOpen ? 'active' : ''}`} 
+        onClick={() => setIsSidebarOpen(false)} 
+      />
+      <div className={`sidebar-drawer ${isSidebarOpen ? 'active' : ''}`}>
+        <div className="sidebar-header">
+          <span className="sidebar-title">Aico Tutor Menu</span>
+          <button className="sidebar-close-btn" onClick={() => setIsSidebarOpen(false)}>×</button>
+        </div>
+
+        <div className="sidebar-section">
+          <span className="sidebar-section-title">Navigation</span>
+          
+          {cardData && (
+            <button 
+              className="sidebar-btn primary"
+              onClick={() => {
+                setViewMode("review");
+                setIsSidebarOpen(false);
+              }}
+            >
+              💬 Return to Conversation
+            </button>
+          )}
+
+          <button 
+            className="sidebar-btn"
+            onClick={startNewSession}
+          >
+            ➕ Start New Session
+          </button>
+
+          <button 
+            className="sidebar-btn"
+            onClick={() => {
+              setViewMode("stats");
+              setIsSidebarOpen(false);
+            }}
+          >
+            📊 View Learning Stats
+          </button>
+        </div>
+
+        <div className="sidebar-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <span className="sidebar-section-title">Recent Conversations</span>
+          <div className="sidebar-history-list">
+            {history.length === 0 ? (
+              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', padding: '10px 0' }}>No saved conversation history.</p>
+            ) : (
+              history.map(item => (
+                <div 
+                  key={item.id} 
+                  className={`sidebar-history-item ${currentSessionId === item.id ? 'active' : ''}`}
+                  onClick={() => loadSession(item)}
+                  style={{ position: 'relative' }}
+                >
+                  <span className="sidebar-history-item-title" style={{ paddingRight: '24px' }}>{item.title}</span>
+                  <span className="sidebar-history-item-date">{new Date(item.timestamp).toLocaleString()}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteSession(item.id);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.4)',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      padding: '4px',
+                      zIndex: 10
+                    }}
+                    onMouseEnter={(e) => e.target.style.color = '#ff6b6b'}
+                    onMouseLeave={(e) => e.target.style.color = 'rgba(255, 255, 255, 0.4)'}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="sidebar-footer">
+          {history.length > 0 && (
+            <button 
+              className="sidebar-delete-history-btn"
+              onClick={async () => {
+                if (confirm("Are you sure you want to delete all conversation history?")) {
+                  setHistory([]);
+                  localStorage.removeItem("aico_chat_history");
+                  startNewSession();
+                  if (currentUser && currentUser.userId) {
+                    try {
+                      await fetch(`http://localhost:3000/api/sessions/clear/all?userId=${currentUser.userId}`, {
+                        method: "DELETE"
+                      });
+                    } catch (err) {
+                      console.error("Failed to clear sessions on server:", err);
+                    }
+                  }
+                }
+              }}
+            >
+              🗑️ Clear All History
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Top Left Menu Button (Open Sidebar) */}
+      <button className="menu-btn" aria-label="Open menu" onClick={() => setIsSidebarOpen(true)}>
         <span aria-hidden="true"></span>
       </button>
 
@@ -149,6 +595,37 @@ function App() {
       )}
 
       {/* Content Layout Division */}
+            <div style={{ position: 'absolute', top: 32, right: 230, zIndex: 120 }}>
+        {!currentUser ? (
+          <GoogleLogin onSuccess={handleLoginSuccess} onError={() => console.log("Login failed")} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
+            {currentUser.picture && <img src={currentUser.picture} alt="" style={{width: 24, borderRadius: '50%'}}/>}
+            <span>{currentUser.name || currentUser.email}</span>
+            <button
+              onClick={() => {
+                setCurrentUser(null);
+                localStorage.removeItem("currentUser");
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: 'none',
+                color: '#ff6b6b',
+                cursor: 'pointer',
+                fontSize: '11px',
+                marginLeft: '8px',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => e.target.style.background = 'rgba(255, 107, 107, 0.2)'}
+              onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
+            >
+              Logout
+            </button>
+          </div>
+        )}
+      </div>
       <div className="content-layout">
         {(viewMode === "assignment" || viewMode === "processing") && (
           <section className={`assignment-panel ${viewMode === "processing" ? "is-processing" : ""}`}>
@@ -186,6 +663,58 @@ function App() {
             {viewMode === "processing" && (
               <p className="assignment-status">AI is analyzing...</p>
             )}
+
+            {cardData && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 15, width: '100%' }}>
+                <button 
+                  type="button"
+                  onClick={() => setViewMode("review")}
+                  style={{
+                    flex: 1,
+                    background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    transition: 'opacity 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.opacity = 0.9}
+                  onMouseLeave={(e) => e.target.style.opacity = 1}
+                >
+                  Return to Conversation
+                </button>
+                <button 
+                  type="button"
+                  onClick={startNewSession}
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: '#ccc',
+                    cursor: 'pointer',
+                    padding: '12px 18px',
+                    borderRadius: '8px',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'rgba(255, 107, 107, 0.15)';
+                    e.target.style.color = '#ff6b6b';
+                    e.target.style.borderColor = 'rgba(255, 107, 107, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(255,255,255,0.08)';
+                    e.target.style.color = '#ccc';
+                    e.target.style.borderColor = 'rgba(255,255,255,0.15)';
+                  }}
+                >
+                  New Session
+                </button>
+              </div>
+            )}
           </section>
         )}
 
@@ -206,39 +735,39 @@ function App() {
                 </div>
               </div>
 
-              <div className="figma-card full-card">
-                <img src={imgExample2} className="card-texture" alt="" />
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Description', content: <p className="card-content-text">{cardData.description}</p> })}>
                 <h2 className="card-title">Description</h2>
+                {cardData && <p className="card-content-text">{cardData.description}</p>}
               </div>
 
               <div className="card-row">
-                <div className="figma-card half-card">
-                  <img src={imgExample2} className="card-texture" alt="" />
+                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Arguments', content: <p className="card-content-text">{cardData.arguments}</p> })}>
                   <h2 className="card-title">Arguments</h2>
+                  {cardData && <p className="card-content-text">{cardData.arguments}</p>}
                 </div>
                 
-                <div className="figma-card half-card">
-                  <img src={imgExample2} className="card-texture" alt="" />
+                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Return values', content: <p className="card-content-text">{cardData.returnValues}</p> })}>
                   <h2 className="card-title">Return values</h2>
+                  {cardData && <p className="card-content-text">{cardData.returnValues}</p>}
                 </div>
               </div>
 
-              <div className="figma-card full-card">
-                <img src={imgExample2} className="card-texture" alt="" />
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'TO DO', content: parseTodoText(cardData.todo) })}>
                 <h2 className="card-title">TO DO</h2>
+                {cardData && parseTodoText(cardData.todo)}
               </div>
 
-              <div className="figma-card full-card">
-                <img src={imgExample2} className="card-texture" alt="" />
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Tips', content: <p className="card-content-text">{cardData.tips}</p> })}>
                 <h2 className="card-title">Tips</h2>
+                {cardData && <p className="card-content-text">{cardData.tips}</p>}
               </div>
 
               <div className="review-workspace">
                 <div className="review-column">
                   <div className="figma-card reveal-card review-reveal-card">
-                    <img src={imgExample2} className="card-texture" alt="" />
                     
-                    <button className="reveal-btn" onClick={() => setShowCode(!showCode)}>
+                    
+                    <button className="reveal-btn" onClick={handleReveal}>
                       <img src={imgRectangle3} className="reveal-btn-bg" alt="" />
                       <span className="reveal-btn-text">
                         {showCode ? "Hide code" : "Reveal AI code"}
@@ -247,17 +776,7 @@ function App() {
 
                     {showCode && (
                       <pre className="code-content-box">
-                        <span className="code-comment">// 1:1 Figma Design mapping verified successfully</span>{"\n"}
-                        <span className="code-keyword">import</span> React <span className="code-keyword">from</span> <span className="code-string">'react'</span>;{"\n\n"}
-                        <span className="code-keyword">export default function</span> <span className="code-func">Slide</span>() &#123;{"\n"}
-                        &nbsp;&nbsp;<span className="code-keyword">return</span> ({"\n"}
-                        &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-keyword">div</span> className=<span className="code-string">"bg-gradient-to-b from-[#0e0f2e] to-[#2d3094] relative"</span>&gt;{"\n"}
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">DescriptionCard</span> /&gt;{"\n"}
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">ArgumentsRow</span> /&gt;{"\n"}
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span className="code-func">PromptBar</span> className=<span className="code-string">"fixed bottom-[114px]"</span> /&gt;{"\n"}
-                        &nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span className="code-keyword">div</span>&gt;{"\n"}
-                        &nbsp;&nbsp;);{"\n"}
-                        &#125;
+                        {cardData ? cardData.code : "// No code generated"}
                       </pre>
                     )}
                   </div>
@@ -265,7 +784,7 @@ function App() {
 
                 <div className="review-column">
                   <div className="figma-card user-code-card">
-                    <img src={imgExample2} className="card-texture" alt="" />
+                    
                     <div className="user-code-header">
                       <h2 className="card-title">Your code</h2>
                       <label className="clip-btn code-upload-btn" aria-label="Upload code file">
@@ -323,7 +842,7 @@ function App() {
             <h1 className="analytics-title">Analytics</h1>
             <div className="stats-layout">
               <div className="figma-card stats-card reveal-stats-card">
-                <img src={imgExample2} className="card-texture" alt="" />
+                
                 <div className="compact-card-content">
                   <div className="score-card-header">
                     <h2 className="stats-title">Reveals this {selectedStat.label}</h2>
@@ -342,12 +861,12 @@ function App() {
                       ))}
                     </div>
                   </div>
-                  <div className="stats-value">{selectedStat.value}</div>
+                  <div className="stats-value">{totalReveals}</div>
                 </div>
               </div>
 
               <div className="figma-card stats-card score-card">
-                <img src={imgExample2} className="card-texture" alt="" />
+                
                 <div className="score-card-content">
                   <div className="score-card-header">
                     <div>
@@ -406,7 +925,7 @@ function App() {
               </div>
 
               <div className="figma-card stats-card bar-card">
-                <img src={imgExample2} className="card-texture" alt="" />
+                
                 <div className="bar-card-content">
                   <div className="score-card-header">
                     <div>
@@ -495,6 +1014,18 @@ function App() {
         )}
 
       </div>
+
+      {expandedCard && (
+        <div className="modal-overlay" onClick={() => setExpandedCard(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-btn" onClick={() => setExpandedCard(null)}>×</button>
+            <h2 className="modal-title">{expandedCard.title}</h2>
+            <div className="modal-body">
+              {expandedCard.content}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
