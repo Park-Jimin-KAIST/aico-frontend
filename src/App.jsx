@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react'
 import { GoogleLogin } from '@react-oauth/google'
 import { jwtDecode } from 'jwt-decode'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 // Assets from local figma mcp server
 const imgExample2 = "http://localhost:3845/assets/5ba0970993e0ba180516990dd8a51489631d4d02.png";
-const imgClock = "/image 1.svg";
-const imgClockArrow = "/image 3.svg";
-const imgClockWidgetBg = "/Group 1.png";
 const imgPaperclip = "/paperclip.png";
-const imgRectangle3 = "http://localhost:3845/assets/e597753f374f81d72b834e02331e42efc244ef4f.svg";
 
 const STATS_OPTIONS = [
   { key: "W", label: "Week", value: 10 },
@@ -80,6 +78,10 @@ function App() {
   const [statsData, setStatsData] = useState(null);
   const [evalFeedback, setEvalFeedback] = useState(null);
 
+  const [pages, setPages] = useState([]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [pendingNewAssignmentFile, setPendingNewAssignmentFile] = useState(null);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [history, setHistory] = useState([]);
@@ -122,8 +124,21 @@ function App() {
     if (!currentSessionId) return;
 
     const delayDebounceFn = setTimeout(() => {
+      const updatedPages = [...pages];
+      if (updatedPages.length > 0 && currentPageIndex >= 0) {
+        updatedPages[currentPageIndex] = {
+          ...updatedPages[currentPageIndex],
+          taskDescription,
+          assignmentFileName,
+          cardData,
+          userCode,
+          evalFeedback
+        };
+      }
+
       const sessionData = {
-        title: taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment",
+        title: updatedPages.length > 0 ? (updatedPages[0].taskDescription?.slice(0, 30) || updatedPages[0].assignmentFileName || "Untitled Assignment") : (taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment"),
+        pages: updatedPages,
         taskDescription,
         assignmentFileName,
         cardData,
@@ -153,7 +168,7 @@ function App() {
     }, 1000); // 1s debounce
 
     return () => clearTimeout(delayDebounceFn);
-  }, [userCode, evalFeedback, cardData, taskDescription, assignmentFileName, currentSessionId, currentUser]);
+  }, [userCode, evalFeedback, cardData, taskDescription, assignmentFileName, currentSessionId, currentUser]); // Exclude pages to prevent infinite loop
 
   useEffect(() => {
     if (viewMode === "stats" && currentUser) {
@@ -191,6 +206,91 @@ function App() {
         {steps.map((step, idx) => (
           <li key={idx} className="todo-list-item">{step.trim()}</li>
         ))}
+      </ul>
+    );
+  };
+
+  const renderTextWithInlineCode = (text) => {
+    if (!text) return null;
+    
+    // Split by newlines to explicitly handle them
+    const lines = text.split('\n');
+    return lines.map((line, lineIdx) => {
+      const parts = line.split(/(`[^`]+`)/g);
+      const renderedLine = parts.map((part, idx) => {
+        if (part.startsWith('`') && part.endsWith('`')) {
+          return (
+            <code key={idx} className="inline-code-highlight">
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        
+        // Highlight keywords and significant words
+        const words = part.split(/(\b(?:int|integer|float|double|str|string|bool|boolean|char|list|dict|dictionary|array|numpy array|tuple|set|object|None|null|void|undefined)\b|\b(?:Hint|Note|Important|Warning|Step)\s*:)/gi);
+        if (words.length > 1) {
+          return (
+            <span key={idx}>
+              {words.map((subPart, subIdx) => {
+                if (/^(int|integer|float|double|str|string|bool|boolean|char|list|dict|dictionary|array|numpy array|tuple|set|object|None|null|void|undefined)$/i.test(subPart)) {
+                  return <strong key={subIdx} className="keyword-highlight">{subPart}</strong>;
+                }
+                if (/^(Hint|Note|Important|Warning|Step)\s*:/i.test(subPart)) {
+                  return <strong key={subIdx} style={{ color: '#ffcc00', fontWeight: 'bold' }}>{subPart}</strong>;
+                }
+                return subPart;
+              })}
+            </span>
+          );
+        }
+        return part;
+      });
+
+      return (
+        <span key={lineIdx}>
+          {renderedLine}
+          {lineIdx < lines.length - 1 && <br />}
+        </span>
+      );
+    });
+  };
+
+  const formatArgumentsOrReturnValues = (text) => {
+    if (!text) return null;
+    const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return null;
+
+    return (
+      <ul className="formatted-list">
+        {lines.map((line, idx) => {
+          const cleanLine = line.replace(/^[-*\u2022\d.]+\s*/, "").trim();
+          if (!cleanLine) return null;
+
+          const firstPuncIdx = cleanLine.search(/[\(:\-]/);
+          if (firstPuncIdx !== -1) {
+            const boldPart = cleanLine.substring(0, firstPuncIdx).trim();
+            const restPart = cleanLine.substring(firstPuncIdx).trim();
+            return (
+              <li key={idx} className="formatted-list-item">
+                <strong>{boldPart}</strong> {renderTextWithInlineCode(restPart)}
+              </li>
+            );
+          } else {
+            const words = cleanLine.split(/\s+/);
+            if (words.length <= 3) {
+              return (
+                <li key={idx} className="formatted-list-item">
+                  <strong>{renderTextWithInlineCode(cleanLine)}</strong>
+                </li>
+              );
+            }
+            return (
+              <li key={idx} className="formatted-list-item">
+                {renderTextWithInlineCode(cleanLine)}
+              </li>
+            );
+          }
+        })}
       </ul>
     );
   };
@@ -421,7 +521,7 @@ function App() {
       });
       const data = await res.json();
       setEvalFeedback(data);
-      setExpandedCard({ title: `Evaluation: ${data.rating}`, content: <p>{data.feedback}</p> });
+      setExpandedCard({ title: `Evaluation: ${data.rating}`, content: <p className="card-content-text">{data.feedback}</p> });
     } catch (e) { console.error(e); }
   };
   
@@ -438,8 +538,85 @@ function App() {
     }
   };
 
-  const handleBottomPromptSend = () => {
-    if (!bottomPrompt.trim()) return;
+  const handlePageChange = (index) => {
+    if (index >= 0 && index < pages.length) {
+      const updatedPages = [...pages];
+      updatedPages[currentPageIndex] = {
+        ...updatedPages[currentPageIndex],
+        taskDescription,
+        assignmentFileName,
+        cardData,
+        userCode,
+        evalFeedback
+      };
+      setPages(updatedPages);
+      
+      setCurrentPageIndex(index);
+      const nextPage = updatedPages[index];
+      setTaskDescription(nextPage.taskDescription || "");
+      setAssignmentFileName(nextPage.assignmentFileName || "");
+      setCardData(nextPage.cardData || null);
+      setUserCode(nextPage.userCode || "");
+      setEvalFeedback(nextPage.evalFeedback || null);
+      setShowCode(false);
+    }
+  };
+
+  const handleBottomPromptSend = async () => {
+    if (!bottomPrompt.trim() && !pendingNewAssignmentFile) return;
+
+    if (viewMode === "review" && pendingNewAssignmentFile) {
+      setIsTyping(true);
+      const fileName = pendingNewAssignmentFile.name;
+      
+      try {
+        let fileData = null;
+        let fileMimeType = null;
+        const base64String = await fileToBase64(pendingNewAssignmentFile);
+        fileData = base64String.split(",")[1];
+        fileMimeType = pendingNewAssignmentFile.type;
+
+        const aiResponse = await fetch("http://localhost:3000/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: bottomPrompt,
+            file: fileData ? { data: fileData, mimeType: fileMimeType } : null
+          })
+        });
+        const data = await aiResponse.json();
+        
+        if (!aiResponse.ok) {
+          throw new Error(data.error || "Failed to generate AI analysis");
+        }
+
+        const newPage = {
+          taskDescription: bottomPrompt,
+          assignmentFileName: fileName,
+          cardData: data,
+          userCode: "",
+          evalFeedback: null
+        };
+        const newPages = [...pages, newPage];
+        setPages(newPages);
+        setCurrentPageIndex(newPages.length - 1);
+        
+        setTaskDescription(bottomPrompt);
+        setAssignmentFileName(fileName);
+        setCardData(data);
+        setUserCode("");
+        setEvalFeedback(null);
+        setShowCode(false);
+        setPendingNewAssignmentFile(null);
+        setBottomPrompt("");
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Failed to analyze the new assignment.");
+      }
+      setIsTyping(false);
+      return;
+    }
+
     setBottomPrompt("");
   };
 
@@ -552,6 +729,39 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
+          <div className="sidebar-user-profile">
+            {!currentUser ? (
+              <GoogleLogin onSuccess={handleLoginSuccess} onError={() => console.log("Login failed")} />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: '8px 12px', borderRadius: 12 }}>
+                  <span>{currentUser.name || currentUser.email}</span>
+                  <button
+                    onClick={() => {
+                      setCurrentUser(null);
+                      localStorage.removeItem("currentUser");
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: 'none',
+                      color: '#ff6b6b',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      marginLeft: 'auto',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = 'rgba(255, 107, 107, 0.2)'}
+                    onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          
           {history.length > 0 && (
             <button 
               className="sidebar-delete-history-btn"
@@ -583,49 +793,16 @@ function App() {
         <span aria-hidden="true"></span>
       </button>
 
-      {/* Top Right Timer Widget */}
+      {/* Top Right Stats Button */}
       {viewMode !== "stats" && (
-        <button className="timer-widget" type="button" aria-label="Open statistics" onClick={() => setViewMode("stats")}>
-          <img src={imgClockWidgetBg} className="timer-widget-bg" alt="" />
-          <span className="timer-icon-group" aria-hidden="true">
-            <img src={imgClock} className="timer-img-1" alt="" />
-            <img src={imgClockArrow} className="timer-img-3" alt="" />
-          </span>
+        <button className="stats-btn" type="button" aria-label="Open statistics" onClick={() => setViewMode("stats")}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 20V10M12 20V4M6 20V14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </button>
       )}
 
       {/* Content Layout Division */}
-            <div style={{ position: 'absolute', top: 32, right: 230, zIndex: 120 }}>
-        {!currentUser ? (
-          <GoogleLogin onSuccess={handleLoginSuccess} onError={() => console.log("Login failed")} />
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: 20 }}>
-            {currentUser.picture && <img src={currentUser.picture} alt="" style={{width: 24, borderRadius: '50%'}}/>}
-            <span>{currentUser.name || currentUser.email}</span>
-            <button
-              onClick={() => {
-                setCurrentUser(null);
-                localStorage.removeItem("currentUser");
-              }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.1)',
-                border: 'none',
-                color: '#ff6b6b',
-                cursor: 'pointer',
-                fontSize: '11px',
-                marginLeft: '8px',
-                padding: '3px 8px',
-                borderRadius: '12px',
-                transition: 'background 0.2s',
-              }}
-              onMouseEnter={(e) => e.target.style.background = 'rgba(255, 107, 107, 0.2)'}
-              onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
-            >
-              Logout
-            </button>
-          </div>
-        )}
-      </div>
       <div className="content-layout">
         {(viewMode === "assignment" || viewMode === "processing") && (
           <section className={`assignment-panel ${viewMode === "processing" ? "is-processing" : ""}`}>
@@ -721,6 +898,27 @@ function App() {
         {viewMode === "review" && (
           <div className="scroll-container review-scroll">
             <section className="cards-layout review-cards-layout">
+              {pages.length > 1 && (
+                <div className="pagination-controls">
+                  <button 
+                    className="pagination-btn"
+                    disabled={currentPageIndex === 0} 
+                    onClick={() => handlePageChange(currentPageIndex - 1)}
+                    aria-label="Previous page"
+                  >
+                    &lt;
+                  </button>
+                  <span className="pagination-text">Page {currentPageIndex + 1} of {pages.length}</span>
+                  <button 
+                    className="pagination-btn"
+                    disabled={currentPageIndex === pages.length - 1} 
+                    onClick={() => handlePageChange(currentPageIndex + 1)}
+                    aria-label="Next page"
+                  >
+                    &gt;
+                  </button>
+                </div>
+              )}
               <div className="assignment-message-row">
                 <div className={`assignment-message ${isAssignmentExpanded ? "expanded" : ""}`}>
                   {assignmentFileName && (
@@ -735,20 +933,20 @@ function App() {
                 </div>
               </div>
 
-              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Description', content: <p className="card-content-text">{cardData.description}</p> })}>
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Description', content: <div className="card-content-text">{renderTextWithInlineCode(cardData.description)}</div> })}>
                 <h2 className="card-title">Description</h2>
-                {cardData && <p className="card-content-text">{cardData.description}</p>}
+                {cardData && <div className="card-content-text">{renderTextWithInlineCode(cardData.description)}</div>}
               </div>
 
               <div className="card-row">
-                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Arguments', content: <p className="card-content-text">{cardData.arguments}</p> })}>
+                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Arguments', content: <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.arguments)}</div> })}>
                   <h2 className="card-title">Arguments</h2>
-                  {cardData && <p className="card-content-text">{cardData.arguments}</p>}
+                  {cardData && <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.arguments)}</div>}
                 </div>
                 
-                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Return values', content: <p className="card-content-text">{cardData.returnValues}</p> })}>
+                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Return values', content: <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.returnValues)}</div> })}>
                   <h2 className="card-title">Return values</h2>
-                  {cardData && <p className="card-content-text">{cardData.returnValues}</p>}
+                  {cardData && <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.returnValues)}</div>}
                 </div>
               </div>
 
@@ -757,9 +955,9 @@ function App() {
                 {cardData && parseTodoText(cardData.todo)}
               </div>
 
-              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Tips', content: <p className="card-content-text">{cardData.tips}</p> })}>
+              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Tips', content: <div className="card-content-text">{renderTextWithInlineCode(cardData.tips)}</div> })}>
                 <h2 className="card-title">Tips</h2>
-                {cardData && <p className="card-content-text">{cardData.tips}</p>}
+                {cardData && <div className="card-content-text">{renderTextWithInlineCode(cardData.tips)}</div>}
               </div>
 
               <div className="review-workspace">
@@ -768,16 +966,17 @@ function App() {
                     
                     
                     <button className="reveal-btn" onClick={handleReveal}>
-                      <img src={imgRectangle3} className="reveal-btn-bg" alt="" />
                       <span className="reveal-btn-text">
                         {showCode ? "Hide code" : "Reveal AI code"}
                       </span>
                     </button>
 
                     {showCode && (
-                      <pre className="code-content-box">
-                        {cardData ? cardData.code : "// No code generated"}
-                      </pre>
+                      <div className="code-content-box" style={{cursor: 'pointer', padding: 0}} onClick={() => cardData && setExpandedCard({ title: 'AI Code', content: <SyntaxHighlighter language={assignmentFileName ? (assignmentFileName.endsWith('.py') ? 'python' : 'javascript') : 'javascript'} style={vscDarkPlus} customStyle={{margin: 0, height: '100%', borderRadius: '10px'}}>{cardData.code}</SyntaxHighlighter> })}>
+                        <SyntaxHighlighter language={assignmentFileName ? (assignmentFileName.endsWith('.py') ? 'python' : 'javascript') : 'javascript'} style={vscDarkPlus} customStyle={{margin: 0, height: '100%', background: 'transparent'}}>
+                          {cardData ? cardData.code : "// No code generated"}
+                        </SyntaxHighlighter>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -823,6 +1022,7 @@ function App() {
                           value={userCode}
                           onChange={(e) => setUserCode(e.target.value)}
                           spellCheck="false"
+                          wrap="off"
                         />
                       </div>
                     </div>
@@ -982,13 +1182,19 @@ function App() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (viewMode === "review") {
-                      handleCodeFile(file);
+                      setPendingNewAssignmentFile(file);
                     } else {
                       handleAssignmentFile(file);
                     }
                   }}
                 />
               </label>
+
+              {pendingNewAssignmentFile && (
+                <div style={{color: '#ec83bb', fontSize: '13px', marginLeft: '10px', whiteSpace: 'nowrap'}}>
+                  {pendingNewAssignmentFile.name}
+                </div>
+              )}
 
               <div className="prompt-left-group compact-prompt-input-wrap">
                 <input
