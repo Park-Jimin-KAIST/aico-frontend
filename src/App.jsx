@@ -1061,7 +1061,7 @@ function App() {
                   </div>
                   <div className="stats-value">{totalReveals}</div>
                   <div className={`reveal-status-text ${totalReveals <= 3 ? 'good' : totalReveals <= 4 ? 'average' : 'bad'}`}>
-                    {totalReveals <= 3 ? "괜찮은 수치네요!" : totalReveals <= 4 ? "평균적인 수준입니다." : "평균보다 너무 많아요!"}
+                    {totalReveals <= 3 ? "Great! Below average" : totalReveals <= 4 ? "Average level" : "Too high! Try solving yourself"}
                   </div>
                 </div>
               </div>
