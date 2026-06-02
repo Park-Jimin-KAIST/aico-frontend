@@ -665,7 +665,7 @@ function App() {
 
   const handleEditorMount = (editor, monaco) => {
     const updateHeight = () => {
-      const contentHeight = Math.max(100, editor.getContentHeight());
+      const contentHeight = editor.getContentHeight();
       setEditorHeight(contentHeight);
     };
     editor.onDidContentSizeChange(updateHeight);
