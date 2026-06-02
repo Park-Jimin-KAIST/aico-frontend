@@ -518,6 +518,20 @@ body, html, #root {
   backdrop-filter: blur(6px);
 }
 
+.has-modal-open .figma-card,
+.has-modal-open .review-column,
+.has-modal-open .review-workspace,
+.has-modal-open .review-layout,
+.has-modal-open .content-scroll-container,
+.has-modal-open .app-viewport {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+  perspective: none !important;
+  filter: none !important;
+  will-change: auto !important;
+}
+
 .editor-topbar {
   height: 38px;
   display: flex;

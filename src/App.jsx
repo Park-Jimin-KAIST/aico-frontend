@@ -668,7 +668,7 @@ function App() {
   };
 
   return (
-    <div className="app-viewport">
+    <div className={`app-viewport ${isCodeModalOpen ? 'has-modal-open' : ''}`}>
       {/* Sidebar Overlay & Drawer */}
       <div 
         className={`sidebar-overlay ${isSidebarOpen ? 'active' : ''}`} 
