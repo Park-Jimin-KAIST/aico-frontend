@@ -99,6 +99,7 @@ function App() {
   const [pages, setPages] = useState([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [pendingNewAssignmentFile, setPendingNewAssignmentFile] = useState(null);
+  const [editorHeight, setEditorHeight] = useState(100);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
@@ -662,6 +663,15 @@ function App() {
     file.text().then(setUserCode).catch(() => {});
   };
 
+  const handleEditorMount = (editor, monaco) => {
+    const updateHeight = () => {
+      const contentHeight = Math.max(100, editor.getContentHeight());
+      setEditorHeight(contentHeight);
+    };
+    editor.onDidContentSizeChange(updateHeight);
+    updateHeight();
+  };
+
   const preventDragDefaults = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1028,6 +1038,7 @@ function App() {
                     {isCodeModalOpen && <div className="code-modal-overlay" onClick={() => setIsCodeModalOpen(false)} />}
                     <div 
                       className={`code-editor-shell ${isCodeModalOpen ? 'fullscreen' : ''}`}
+                      style={!isCodeModalOpen ? { height: `${editorHeight + 38 + 32}px`, minHeight: 'auto' } : undefined}
                       onClick={() => {
                         if (!isCodeModalOpen) setIsCodeModalOpen(true);
                       }}
@@ -1060,6 +1071,7 @@ function App() {
                           theme="vs-dark"
                           value={userCode}
                           onChange={(value) => setUserCode(value || '')}
+                          onMount={handleEditorMount}
                           options={{
                             minimap: { enabled: false },
                             fontSize: 14,
