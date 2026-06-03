@@ -604,22 +604,30 @@ function App() {
   const handleBottomPromptSend = async () => {
     if (!bottomPrompt.trim() && !pendingNewAssignmentFile) return;
 
-    if (viewMode === "review" && pendingNewAssignmentFile) {
+    if (viewMode === "review") {
       setIsTyping(true);
-      const fileName = pendingNewAssignmentFile.name;
+      let fileName = assignmentFileName;
       
       try {
         let fileData = null;
         let fileMimeType = null;
-        const base64String = await fileToBase64(pendingNewAssignmentFile);
-        fileData = base64String.split(",")[1];
-        fileMimeType = pendingNewAssignmentFile.type;
+        
+        if (pendingNewAssignmentFile) {
+          fileName = pendingNewAssignmentFile.name;
+          const base64String = await fileToBase64(pendingNewAssignmentFile);
+          fileData = base64String.split(",")[1];
+          fileMimeType = pendingNewAssignmentFile.type;
+        } else if (assignmentFile) {
+          const base64String = await fileToBase64(assignmentFile);
+          fileData = base64String.split(",")[1];
+          fileMimeType = assignmentFile.type;
+        }
 
         const aiResponse = await fetch("http://localhost:3000/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: bottomPrompt,
+            prompt: bottomPrompt || "Please analyze this file.",
             file: fileData ? { data: fileData, mimeType: fileMimeType } : null
           })
         });
@@ -630,7 +638,7 @@ function App() {
         }
 
         const newPage = {
-          taskDescription: bottomPrompt,
+          taskDescription: bottomPrompt || "Updated file",
           assignmentFileName: fileName,
           cardData: data,
           userCode: "",
@@ -640,7 +648,7 @@ function App() {
         setPages(newPages);
         setCurrentPageIndex(newPages.length - 1);
         
-        setTaskDescription(bottomPrompt);
+        setTaskDescription(newPage.taskDescription);
         setAssignmentFileName(fileName);
         setCardData(data);
         setUserCode("");
@@ -1254,6 +1262,25 @@ function App() {
 
         {viewMode === "review" && (
           <div className="compact-prompt-wrapper">
+            {pages.length > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '10px', gap: '15px' }}>
+                <button 
+                  onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
+                  disabled={currentPageIndex === 0}
+                  style={{ background: 'transparent', border: 'none', color: currentPageIndex === 0 ? '#555' : '#aaa', cursor: currentPageIndex === 0 ? 'default' : 'pointer', fontSize: '18px', padding: '0 10px' }}
+                >
+                  ◀
+                </button>
+                <span style={{ color: '#ccc', fontSize: '13px', fontWeight: 'bold' }}>Page {currentPageIndex + 1} of {pages.length}</span>
+                <button 
+                  onClick={() => setCurrentPageIndex(Math.min(pages.length - 1, currentPageIndex + 1))}
+                  disabled={currentPageIndex === pages.length - 1}
+                  style={{ background: 'transparent', border: 'none', color: currentPageIndex === pages.length - 1 ? '#555' : '#aaa', cursor: currentPageIndex === pages.length - 1 ? 'default' : 'pointer', fontSize: '18px', padding: '0 10px' }}
+                >
+                  ▶
+                </button>
+              </div>
+            )}
             <div className="prompt-bar compact-prompt-bar">
               <label className="clip-btn compact-prompt-clip" aria-label="Attach file">
                 <img src={imgPaperclip} alt="" aria-hidden="true" />
