@@ -380,6 +380,16 @@ function App() {
       setViewMode("review");
 
       const sessionTitle = taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment";
+      
+      const firstPage = {
+        taskDescription,
+        assignmentFileName,
+        cardData: data,
+        userCode: "",
+        evalFeedback: null
+      };
+      setPages([firstPage]);
+      setCurrentPageIndex(0);
 
       if (currentUser && currentUser.userId) {
         // Save to MongoDB
@@ -392,6 +402,7 @@ function App() {
             taskDescription,
             assignmentFileName,
             cardData: data,
+            pages: [firstPage],
             userCode: "",
             evalFeedback: null
           })
@@ -407,6 +418,7 @@ function App() {
             taskDescription,
             assignmentFileName,
             cardData: data,
+            pages: [firstPage],
             userCode: "",
             evalFeedback: null,
             timestamp: Date.now()
@@ -444,6 +456,7 @@ function App() {
               taskDescription,
               assignmentFileName,
               cardData: data,
+              pages: [firstPage],
               userCode: "",
               evalFeedback: null,
               timestamp: Date.now()
@@ -1270,6 +1283,25 @@ function App() {
 
         {viewMode === "review" && (
           <div className="compact-prompt-wrapper">
+            {pages.length > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '10px', gap: '15px' }}>
+                <button 
+                  onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
+                  disabled={currentPageIndex === 0}
+                  style={{ background: 'transparent', border: 'none', color: currentPageIndex === 0 ? '#555' : '#aaa', cursor: currentPageIndex === 0 ? 'default' : 'pointer', fontSize: '18px', padding: '0 10px' }}
+                >
+                  ◀
+                </button>
+                <span style={{ color: '#ccc', fontSize: '13px', fontWeight: 'bold' }}>Page {currentPageIndex + 1} of {pages.length}</span>
+                <button 
+                  onClick={() => setCurrentPageIndex(Math.min(pages.length - 1, currentPageIndex + 1))}
+                  disabled={currentPageIndex === pages.length - 1}
+                  style={{ background: 'transparent', border: 'none', color: currentPageIndex === pages.length - 1 ? '#555' : '#aaa', cursor: currentPageIndex === pages.length - 1 ? 'default' : 'pointer', fontSize: '18px', padding: '0 10px' }}
+                >
+                  ▶
+                </button>
+              </div>
+            )}
             <div className="prompt-bar compact-prompt-bar">
               <label className="clip-btn compact-prompt-clip" aria-label="Attach file">
                 <img src={imgPaperclip} alt="" aria-hidden="true" />
