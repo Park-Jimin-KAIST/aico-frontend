@@ -574,6 +574,9 @@ function App() {
   };
   
   const handleReveal = async () => {
+    if (!showCode) {
+      if (!window.confirm("Are you sure you want to reveal the AI code?")) return;
+    }
     setShowCode(!showCode);
     if (!showCode && currentUser) {
       const pageKey = `${currentSessionId}-${currentPageIndex}`;
@@ -1052,13 +1055,9 @@ function App() {
                       </label>
                     </div>
 
-                    {isCodeModalOpen && <div className="code-modal-overlay" onClick={() => setIsCodeModalOpen(false)} />}
                     <div 
-                      className={`code-editor-shell ${isCodeModalOpen ? 'fullscreen' : ''}`}
-                      style={!isCodeModalOpen ? { height: `${editorHeight + 38 + 32}px`, minHeight: 'auto' } : undefined}
-                      onClick={() => {
-                        if (!isCodeModalOpen) setIsCodeModalOpen(true);
-                      }}
+                      className="code-editor-shell"
+                      style={{ height: '100%' }}
                     >
                       <div className="editor-topbar">
                         <span></span>
@@ -1123,7 +1122,11 @@ function App() {
                 <div className="review-column">
                   <div className="figma-card reveal-card review-reveal-card">
                     
-                    <button className="reveal-btn" onClick={handleReveal}>
+                    <button 
+                      className="reveal-btn" 
+                      onClick={handleReveal}
+                      style={!showCode ? { backgroundColor: '#ff4d4f', color: '#fff', borderColor: '#ff4d4f' } : {}}
+                    >
                       <span className="reveal-btn-text">
                         {showCode ? "Hide code" : "Reveal AI code"}
                       </span>
