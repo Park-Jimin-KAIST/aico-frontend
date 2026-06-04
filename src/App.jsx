@@ -1037,26 +1037,6 @@ function App() {
 
               <div className="review-workspace">
                 <div className="review-column">
-                  <div className="figma-card reveal-card review-reveal-card">
-                    
-                    
-                    <button className="reveal-btn" onClick={handleReveal}>
-                      <span className="reveal-btn-text">
-                        {showCode ? "Hide code" : "Reveal AI code"}
-                      </span>
-                    </button>
-
-                    {showCode && (
-                      <div className="code-content-box" style={{cursor: 'pointer', padding: 0}} onClick={() => cardData && setExpandedCard({ title: 'AI Code', content: <SyntaxHighlighter language={assignmentFileName ? (assignmentFileName.endsWith('.py') ? 'python' : 'javascript') : 'javascript'} style={vscDarkPlus} customStyle={{margin: 0, height: '100%', borderRadius: '10px'}}>{cardData.code}</SyntaxHighlighter> })}>
-                        <SyntaxHighlighter language={assignmentFileName ? (assignmentFileName.endsWith('.py') ? 'python' : 'javascript') : 'javascript'} style={vscDarkPlus} customStyle={{margin: 0, height: '100%', background: 'transparent'}}>
-                          {cardData ? cardData.code : "// No code generated"}
-                        </SyntaxHighlighter>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="review-column">
                   <div className="figma-card user-code-card">
                     
                     <div className="user-code-header">
@@ -1135,6 +1115,25 @@ function App() {
                       <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', border: '1px solid rgba(236, 131, 187, 0.3)' }}>
                         <h3 style={{ margin: '0 0 10px 0', color: '#ec83bb', fontSize: '16px', fontWeight: '600' }}>Evaluation: {evalFeedback.rating}</h3>
                         <p style={{ margin: 0, color: '#e2e8f0', fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{evalFeedback.feedback}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="review-column">
+                  <div className="figma-card reveal-card review-reveal-card">
+                    
+                    <button className="reveal-btn" onClick={handleReveal}>
+                      <span className="reveal-btn-text">
+                        {showCode ? "Hide code" : "Reveal AI code"}
+                      </span>
+                    </button>
+
+                    {showCode && (
+                      <div className="code-content-box" style={{cursor: 'pointer', padding: 0}} onClick={() => cardData && setExpandedCard({ title: 'AI Code', content: <SyntaxHighlighter language={assignmentFileName ? (assignmentFileName.endsWith('.py') ? 'python' : 'javascript') : 'javascript'} style={vscDarkPlus} customStyle={{margin: 0, height: '100%', borderRadius: '10px'}}>{cardData.code}</SyntaxHighlighter> })}>
+                        <SyntaxHighlighter language={assignmentFileName ? (assignmentFileName.endsWith('.py') ? 'python' : 'javascript') : 'javascript'} style={vscDarkPlus} customStyle={{margin: 0, height: '100%', background: 'transparent'}}>
+                          {cardData ? cardData.code : "// No code generated"}
+                        </SyntaxHighlighter>
                       </div>
                     )}
                   </div>

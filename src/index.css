@@ -406,25 +406,26 @@ body, html, #root {
 .review-workspace {
   position: relative;
   z-index: 12;
-  display: grid;
-  grid-template-columns: minmax(300px, 0.76fr) minmax(500px, 1.24fr);
+  display: flex;
+  flex-direction: column;
   gap: 26px;
   width: 100%;
-  min-height: 520px;
   animation: fadeIn 0.55s ease-out forwards;
 }
 
 .review-column {
-  min-width: 0;
-  min-height: 0;
   display: flex;
+  width: 100%;
 }
 
-.review-reveal-card,
+.review-reveal-card {
+  width: 100%;
+  min-height: 350px;
+}
+
 .user-code-card {
   width: 100%;
-  min-height: 0;
-  height: 100%;
+  min-height: 500px;
 }
 
 .review-reveal-card {
