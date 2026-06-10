@@ -81,14 +81,8 @@ function App() {
   const [showCode, setShowCode] = useState(false);
   const [isAssignmentExpanded, setIsAssignmentExpanded] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [completionsRange, setCompletionsRange] = useState("W");
-  const [completionsCount, setCompletionsCount] = useState(0);
-
-  const [scoreRange, setScoreRange] = useState("W");
-  const [scoreRatings, setScoreRatings] = useState({ unacceptable: 0, poor: 0, fair: 0, good: 0, excellent: 0 });
-
-  const [historyRange, setHistoryRange] = useState("W");
-  const [historyData, setHistoryData] = useState([]);
+  const [statsRange, setStatsRange] = useState("W");
+  const [statsData, setStatsData] = useState(null);
   const [cardData, setCardData] = useState(null);
   const [expandedCard, setExpandedCard] = useState(null);
   const [collapsedChunks, setCollapsedChunks] = useState({ description: false, arguments: false, returnValues: false, todo: false, tips: false });
@@ -218,30 +212,12 @@ function App() {
 
   useEffect(() => {
     if (viewMode === "stats" && currentUser) {
-      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${completionsRange}`)
+      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${statsRange}`)
         .then(res => res.json())
-        .then(data => setCompletionsCount(data.totalCompletedWithoutReveal || data.totalReveals || 0))
+        .then(data => setStatsData(data))
         .catch(console.error);
     }
-  }, [viewMode, completionsRange, currentUser]);
-
-  useEffect(() => {
-    if (viewMode === "stats" && currentUser) {
-      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${scoreRange}`)
-        .then(res => res.json())
-        .then(data => setScoreRatings(data.scoreRatings || { unacceptable: 0, poor: 0, fair: 0, good: 0, excellent: 0 }))
-        .catch(console.error);
-    }
-  }, [viewMode, scoreRange, currentUser]);
-
-  useEffect(() => {
-    if (viewMode === "stats" && currentUser) {
-      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${historyRange}`)
-        .then(res => res.json())
-        .then(data => setHistoryData(data.history || []))
-        .catch(console.error);
-    }
-  }, [viewMode, historyRange, currentUser]);
+  }, [viewMode, statsRange, currentUser]);
   
   const handleLoginSuccess = async (credentialResponse) => {
     try {
@@ -359,18 +335,17 @@ function App() {
     );
   };
 
-  const selectedCompletionsStat = STATS_OPTIONS.find(option => option.key === completionsRange) ?? STATS_OPTIONS[0];
-  const selectedScoreStat = STATS_OPTIONS.find(option => option.key === scoreRange) ?? STATS_OPTIONS[0];
-  const selectedHistoryStat = STATS_OPTIONS.find(option => option.key === historyRange) ?? STATS_OPTIONS[0];
-
-  const ratingTotal = (scoreRatings.unacceptable || 0) + (scoreRatings.poor || 0) + (scoreRatings.fair || 0) + (scoreRatings.good || 0) + (scoreRatings.excellent || 0);
-  const unacceptablePercent = ratingTotal ? Math.round(((scoreRatings.unacceptable || 0) / ratingTotal) * 100) : 0;
-  const poorPercent = ratingTotal ? Math.round(((scoreRatings.poor || 0) / ratingTotal) * 100) : 0;
-  const fairPercent = ratingTotal ? Math.round(((scoreRatings.fair || 0) / ratingTotal) * 100) : 0;
-  const goodPercent = ratingTotal ? Math.round(((scoreRatings.good || 0) / ratingTotal) * 100) : 0;
+  const selectedStat = STATS_OPTIONS.find(option => option.key === statsRange) ?? STATS_OPTIONS[0];
+  const selectedRatings = statsData && statsData.scoreRatings ? statsData.scoreRatings : { unacceptable: 0, poor: 0, fair: 0, good: 0, excellent: 0 };
+  const ratingTotal = (selectedRatings.unacceptable || 0) + (selectedRatings.poor || 0) + (selectedRatings.fair || 0) + (selectedRatings.good || 0) + (selectedRatings.excellent || 0);
+  const unacceptablePercent = ratingTotal ? Math.round(((selectedRatings.unacceptable || 0) / ratingTotal) * 100) : 0;
+  const poorPercent = ratingTotal ? Math.round(((selectedRatings.poor || 0) / ratingTotal) * 100) : 0;
+  const fairPercent = ratingTotal ? Math.round(((selectedRatings.fair || 0) / ratingTotal) * 100) : 0;
+  const goodPercent = ratingTotal ? Math.round(((selectedRatings.good || 0) / ratingTotal) * 100) : 0;
   const excellentPercent = ratingTotal ? 100 - unacceptablePercent - poorPercent - fairPercent - goodPercent : 0;
-  const selectedRatings = scoreRatings;
-  const maxHistoryValue = historyData.length > 0 ? Math.max(...historyData.map(item => item.value)) : 10;
+  const selectedHistory = statsData?.history || [];
+  const maxHistoryValue = selectedHistory.length > 0 ? Math.max(...selectedHistory.map(item => item.value)) : 10;
+  const totalReveals = statsData?.totalReveals || 0;
 
   const handleSend = () => {
     if ((!taskDescription.trim() && !assignmentFileName) || isTyping) return;
@@ -1256,31 +1231,34 @@ function App() {
 
         {viewMode === "stats" && (
           <div className="stats-container">
-            <h1 className="analytics-title">Analytics</h1>
+            <div className="analytics-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h1 className="analytics-title" style={{ margin: 0 }}>Analytics</h1>
+              <div className="score-range-controls" aria-label="Analytics range" style={{ margin: 0 }}>
+                {STATS_OPTIONS.map(option => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
+                    onClick={() => setStatsRange(option.key)}
+                    aria-label={option.label}
+                    aria-pressed={statsRange === option.key}
+                  >
+                    {option.key}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
             <div className="stats-layout">
               <div className="figma-card stats-card reveal-stats-card">
                 
                 <div className="compact-card-content">
                   <div className="score-card-header">
-                    <h2 className="stats-title">Completions (No Reveal) this {selectedCompletionsStat.label}</h2>
-                    <div className="score-range-controls" aria-label="Completions range">
-                      {STATS_OPTIONS.map(option => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          className={`score-range-btn ${completionsRange === option.key ? "active" : ""}`}
-                          onClick={() => setCompletionsRange(option.key)}
-                          aria-label={option.label}
-                          aria-pressed={completionsRange === option.key}
-                        >
-                          {option.key}
-                        </button>
-                      ))}
-                    </div>
+                    <h2 className="stats-title">Completions (No Reveal) this {selectedStat.label}</h2>
                   </div>
-                  <div className="stats-value">{completionsCount}</div>
-                  <div className={`reveal-status-text ${completionsCount >= 5 ? 'good' : completionsCount >= 2 ? 'average' : 'bad'}`}>
-                    {completionsCount >= 5 ? "Excellent! You are solving tasks on your own!" : completionsCount >= 2 ? "Good job! Keep solving without code reveals." : "Try to complete more tasks without revealing code."}
+                  <div className="stats-value">{totalReveals}</div>
+                  <div className={`reveal-status-text ${totalReveals >= 5 ? 'good' : totalReveals >= 2 ? 'average' : 'bad'}`}>
+                    {totalReveals >= 5 ? "Excellent! You are solving tasks on your own!" : totalReveals >= 2 ? "Good job! Keep solving without code reveals." : "Try to complete more tasks without revealing code."}
                   </div>
                 </div>
               </div>
@@ -1291,20 +1269,6 @@ function App() {
                   <div className="score-card-header">
                     <div>
                       <h2 className="score-title">Score ratings</h2>
-                    </div>
-                    <div className="score-range-controls" aria-label="Score rating range">
-                      {STATS_OPTIONS.map(option => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          className={`score-range-btn ${scoreRange === option.key ? "active" : ""}`}
-                          onClick={() => setScoreRange(option.key)}
-                          aria-label={option.label}
-                          aria-pressed={scoreRange === option.key}
-                        >
-                          {option.key}
-                        </button>
-                      ))}
                     </div>
                   </div>
 
@@ -1321,7 +1285,7 @@ function App() {
                     >
                       <div className="score-chart-center">
                         <span>{ratingTotal}</span>
-                        <small>{selectedScoreStat.label}</small>
+                        <small>{selectedStat.label}</small>
                       </div>
                     </div>
 
@@ -1363,20 +1327,6 @@ function App() {
                     <div>
                       <h2 className="score-title">No-Reveal completions history</h2>
                     </div>
-                    <div className="score-range-controls" aria-label="Completions history range">
-                      {STATS_OPTIONS.map(option => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          className={`score-range-btn ${historyRange === option.key ? "active" : ""}`}
-                          onClick={() => setHistoryRange(option.key)}
-                          aria-label={option.label}
-                          aria-pressed={historyRange === option.key}
-                        >
-                          {option.key}
-                        </button>
-                      ))}
-                    </div>
                   </div>
 
                   <div className="bar-chart-shell">
@@ -1385,8 +1335,8 @@ function App() {
                         <span key={`${value}-${index}`}>{value}</span>
                       ))}
                     </div>
-                    <div className={`bar-chart range-${historyRange.toLowerCase()}`}>
-                      {historyData.map(item => (
+                    <div className={`bar-chart range-${statsRange.toLowerCase()}`}>
+                      {selectedHistory.map(item => (
                         <div className="bar-item" key={item.label}>
                           <div className="bar-value">{item.value}</div>
                           <div className="bar-track">
