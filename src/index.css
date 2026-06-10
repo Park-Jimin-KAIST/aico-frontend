@@ -1225,9 +1225,11 @@ pre::-webkit-scrollbar-thumb:hover {
   background:
     conic-gradient(
       from -65deg,
-      #ff6478 0 var(--red),
-      #f5c65b var(--red) calc(var(--red) + var(--yellow)),
-      #6ee7a2 calc(var(--red) + var(--yellow)) 100%
+      #ff6478 0 var(--unacceptable),
+      #ff9966 var(--unacceptable) calc(var(--unacceptable) + var(--poor)),
+      #f5c65b calc(var(--unacceptable) + var(--poor)) calc(var(--unacceptable) + var(--poor) + var(--fair)),
+      #6ee7a2 calc(var(--unacceptable) + var(--poor) + var(--fair)) calc(var(--unacceptable) + var(--poor) + var(--fair) + var(--good)),
+      #3282f6 calc(var(--unacceptable) + var(--poor) + var(--fair) + var(--good)) 100%
     );
   box-shadow:
     0 0 34px rgba(236, 131, 187, 0.26),
@@ -1306,19 +1308,27 @@ pre::-webkit-scrollbar-thumb:hover {
   color: rgba(202, 214, 232, 0.82);
 }
 
-.score-scale-item.bad {
+.score-scale-item.unacceptable {
   color: #ff6478;
 }
 
-.score-scale-item.bad span {
+.score-scale-item.unacceptable span {
   background: linear-gradient(180deg, #ff8a9a, #d93c57);
 }
 
-.score-scale-item.mid {
+.score-scale-item.poor {
+  color: #ff9966;
+}
+
+.score-scale-item.poor span {
+  background: linear-gradient(180deg, #ffb38a, #d9733c);
+}
+
+.score-scale-item.fair {
   color: #f5c65b;
 }
 
-.score-scale-item.mid span {
+.score-scale-item.fair span {
   background: linear-gradient(180deg, #ffe08a, #d99932);
 }
 
@@ -1328,6 +1338,14 @@ pre::-webkit-scrollbar-thumb:hover {
 
 .score-scale-item.good span {
   background: linear-gradient(180deg, #9af4bf, #35b978);
+}
+
+.score-scale-item.excellent {
+  color: #3282f6;
+}
+
+.score-scale-item.excellent span {
+  background: linear-gradient(180deg, #74abf8, #1d5fc6);
 }
 
 /* Reveal Code Content Block */

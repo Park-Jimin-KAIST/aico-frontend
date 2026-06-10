@@ -81,9 +81,22 @@ function App() {
   const [showCode, setShowCode] = useState(false);
   const [isAssignmentExpanded, setIsAssignmentExpanded] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [statsRange, setStatsRange] = useState("W");
+  const [completionsRange, setCompletionsRange] = useState("W");
+  const [completionsCount, setCompletionsCount] = useState(0);
+
+  const [scoreRange, setScoreRange] = useState("W");
+  const [scoreRatings, setScoreRatings] = useState({ unacceptable: 0, poor: 0, fair: 0, good: 0, excellent: 0 });
+
+  const [historyRange, setHistoryRange] = useState("W");
+  const [historyData, setHistoryData] = useState([]);
   const [cardData, setCardData] = useState(null);
   const [expandedCard, setExpandedCard] = useState(null);
+  const [collapsedChunks, setCollapsedChunks] = useState({ description: false, arguments: false, returnValues: false, todo: false, tips: false });
+
+  const toggleChunk = (chunkKey) => {
+    setCollapsedChunks(prev => ({ ...prev, [chunkKey]: !prev[chunkKey] }));
+  };
+
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
     try {
@@ -93,7 +106,6 @@ function App() {
       return null;
     }
   });
-  const [statsData, setStatsData] = useState(null);
   const [evalFeedback, setEvalFeedback] = useState(null);
 
   const [pages, setPages] = useState([]);
@@ -105,6 +117,7 @@ function App() {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
+  const [showConfirmRevealModal, setShowConfirmRevealModal] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [history, setHistory] = useState([]);
 
@@ -205,12 +218,30 @@ function App() {
 
   useEffect(() => {
     if (viewMode === "stats" && currentUser) {
-      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${statsRange}`)
+      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${completionsRange}`)
         .then(res => res.json())
-        .then(data => setStatsData(data))
+        .then(data => setCompletionsCount(data.totalCompletedWithoutReveal || data.totalReveals || 0))
         .catch(console.error);
     }
-  }, [viewMode, statsRange, currentUser]);
+  }, [viewMode, completionsRange, currentUser]);
+
+  useEffect(() => {
+    if (viewMode === "stats" && currentUser) {
+      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${scoreRange}`)
+        .then(res => res.json())
+        .then(data => setScoreRatings(data.scoreRatings || { unacceptable: 0, poor: 0, fair: 0, good: 0, excellent: 0 }))
+        .catch(console.error);
+    }
+  }, [viewMode, scoreRange, currentUser]);
+
+  useEffect(() => {
+    if (viewMode === "stats" && currentUser) {
+      fetch(`http://localhost:3000/api/stats?userId=${currentUser.userId}&range=${historyRange}`)
+        .then(res => res.json())
+        .then(data => setHistoryData(data.history || []))
+        .catch(console.error);
+    }
+  }, [viewMode, historyRange, currentUser]);
   
   const handleLoginSuccess = async (credentialResponse) => {
     try {
@@ -328,15 +359,18 @@ function App() {
     );
   };
 
-  const selectedStat = STATS_OPTIONS.find(option => option.key === statsRange) ?? STATS_OPTIONS[0];
-  const selectedRatings = statsData ? statsData.scoreRatings : { red: 0, yellow: 0, green: 0 };
-  const ratingTotal = selectedRatings.red + selectedRatings.yellow + selectedRatings.green;
-  const redPercent = ratingTotal ? Math.round((selectedRatings.red / ratingTotal) * 100) : 0;
-  const yellowPercent = ratingTotal ? Math.round((selectedRatings.yellow / ratingTotal) * 100) : 0;
-  const greenPercent = ratingTotal ? 100 - redPercent - yellowPercent : 0;
-  const selectedHistory = statsData?.history || [];
-  const maxHistoryValue = selectedHistory.length > 0 ? Math.max(...selectedHistory.map(item => item.value)) : 10;
-  const totalReveals = statsData?.totalReveals || 0;
+  const selectedCompletionsStat = STATS_OPTIONS.find(option => option.key === completionsRange) ?? STATS_OPTIONS[0];
+  const selectedScoreStat = STATS_OPTIONS.find(option => option.key === scoreRange) ?? STATS_OPTIONS[0];
+  const selectedHistoryStat = STATS_OPTIONS.find(option => option.key === historyRange) ?? STATS_OPTIONS[0];
+
+  const ratingTotal = (scoreRatings.unacceptable || 0) + (scoreRatings.poor || 0) + (scoreRatings.fair || 0) + (scoreRatings.good || 0) + (scoreRatings.excellent || 0);
+  const unacceptablePercent = ratingTotal ? Math.round(((scoreRatings.unacceptable || 0) / ratingTotal) * 100) : 0;
+  const poorPercent = ratingTotal ? Math.round(((scoreRatings.poor || 0) / ratingTotal) * 100) : 0;
+  const fairPercent = ratingTotal ? Math.round(((scoreRatings.fair || 0) / ratingTotal) * 100) : 0;
+  const goodPercent = ratingTotal ? Math.round(((scoreRatings.good || 0) / ratingTotal) * 100) : 0;
+  const excellentPercent = ratingTotal ? 100 - unacceptablePercent - poorPercent - fairPercent - goodPercent : 0;
+  const selectedRatings = scoreRatings;
+  const maxHistoryValue = historyData.length > 0 ? Math.max(...historyData.map(item => item.value)) : 10;
 
   const handleSend = () => {
     if ((!taskDescription.trim() && !assignmentFileName) || isTyping) return;
@@ -386,7 +420,9 @@ function App() {
         assignmentFileName,
         cardData: data,
         userCode: "",
-        evalFeedback: null
+        evalFeedback: null,
+        codeRevealed: false,
+        completedWithoutReveal: false
       };
       setPages([firstPage]);
       setCurrentPageIndex(0);
@@ -508,6 +544,8 @@ function App() {
     setAssignmentFile(null);
     setCardData(session.cardData);
     setEvalFeedback(session.evalFeedback || null);
+    setPages(session.pages || []);
+    setCurrentPageIndex(session.pages && session.pages.length > 0 ? 0 : 0);
     setViewMode("review");
     setIsSidebarOpen(false);
   };
@@ -569,16 +607,48 @@ function App() {
       const data = await res.json();
       setEvalFeedback(data);
       setExpandedCard({ title: `Evaluation: ${data.rating}`, content: <p className="card-content-text">{data.feedback}</p> });
+
+      // Calculate completedWithoutReveal
+      const isGoodOrExcellent = data.rating === "GOOD" || data.rating === "EXCELLENT";
+      const currentPage = pages[currentPageIndex];
+      const isRevealed = currentPage?.codeRevealed || false;
+      const completedWithoutReveal = isGoodOrExcellent && !isRevealed;
+
+      const updatedPages = [...pages];
+      if (updatedPages.length > 0 && currentPageIndex >= 0) {
+        updatedPages[currentPageIndex] = {
+          ...updatedPages[currentPageIndex],
+          evalFeedback: data,
+          completedWithoutReveal: completedWithoutReveal || (updatedPages[currentPageIndex].completedWithoutReveal || false)
+        };
+        setPages(updatedPages);
+      }
     } catch (e) { console.error(e); }
     setIsEvaluating(false);
   };
   
-  const handleReveal = async () => {
+  const handleReveal = () => {
     if (!showCode) {
-      if (!window.confirm("Are you sure you want to reveal the AI code?")) return;
+      setShowConfirmRevealModal(true);
+      return;
     }
-    setShowCode(!showCode);
-    if (!showCode && currentUser) {
+    setShowCode(false);
+  };
+
+  const confirmReveal = async () => {
+    setShowConfirmRevealModal(false);
+    setShowCode(true);
+
+    const updatedPages = [...pages];
+    if (updatedPages.length > 0 && currentPageIndex >= 0) {
+      updatedPages[currentPageIndex] = {
+        ...updatedPages[currentPageIndex],
+        codeRevealed: true
+      };
+      setPages(updatedPages);
+    }
+
+    if (currentUser) {
       const pageKey = `${currentSessionId}-${currentPageIndex}`;
       if (!revealedPages.has(pageKey)) {
         setRevealedPages(prev => new Set([...prev, pageKey]));
@@ -587,6 +657,27 @@ function App() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId: currentUser.userId })
+          });
+        } catch (e) { console.error(e); }
+      }
+
+      if (currentSessionId) {
+        // Save codeRevealed change to MongoDB session
+        const sessionData = {
+          title: updatedPages.length > 0 ? (updatedPages[0].taskDescription?.slice(0, 30) || updatedPages[0].assignmentFileName || "Untitled Assignment") : (taskDescription.slice(0, 30) || assignmentFileName || "Untitled Assignment"),
+          pages: updatedPages,
+          taskDescription,
+          assignmentFileName,
+          cardData,
+          userCode,
+          evalFeedback,
+          timestamp: Date.now()
+        };
+        try {
+          await fetch(`http://localhost:3000/api/sessions/${currentSessionId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sessionData)
           });
         } catch (e) { console.error(e); }
       }
@@ -666,7 +757,9 @@ function App() {
           assignmentFileName: fileName,
           cardData: data,
           userCode: "",
-          evalFeedback: null
+          evalFeedback: null,
+          codeRevealed: false,
+          completedWithoutReveal: false
         };
         const newPages = [...pages, newPage];
         setPages(newPages);
@@ -875,7 +968,7 @@ function App() {
       {viewMode !== "stats" && (
         <button className="stats-btn" type="button" aria-label="Open statistics" onClick={() => setViewMode("stats")}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M18 20V10M12 20V4M6 20V14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M18 20V10M12 20V4M6 20V14" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
       )}
@@ -1011,31 +1104,46 @@ function App() {
                 </div>
               </div>
 
-              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Description', content: <div className="card-content-text">{renderTextWithInlineCode(cardData.description)}</div> })}>
-                <h2 className="card-title">Description</h2>
-                {cardData && <div className="card-content-text">{renderTextWithInlineCode(cardData.description)}</div>}
+              <div className="figma-card full-card clickable-card" onClick={() => toggleChunk('description')}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <h2 className="card-title" style={{margin: 0}}>Description</h2>
+                  <span style={{color: '#a0aec0', fontSize: '14px', transition: 'transform 0.3s', transform: collapsedChunks.description ? 'rotate(-90deg)' : 'rotate(0)'}}>▼</span>
+                </div>
+                {!collapsedChunks.description && cardData && <div className="card-content-text" style={{marginTop: '15px'}}>{renderTextWithInlineCode(cardData.description)}</div>}
               </div>
 
               <div className="card-row">
-                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Arguments', content: <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.arguments)}</div> })}>
-                  <h2 className="card-title">Arguments</h2>
-                  {cardData && <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.arguments)}</div>}
+                <div className="figma-card half-card clickable-card" onClick={() => toggleChunk('arguments')}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <h2 className="card-title" style={{margin: 0}}>Arguments</h2>
+                    <span style={{color: '#a0aec0', fontSize: '14px', transition: 'transform 0.3s', transform: collapsedChunks.arguments ? 'rotate(-90deg)' : 'rotate(0)'}}>▼</span>
+                  </div>
+                  {!collapsedChunks.arguments && cardData && <div className="card-content-text" style={{marginTop: '15px'}}>{formatArgumentsOrReturnValues(cardData.arguments)}</div>}
                 </div>
                 
-                <div className="figma-card half-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Return values', content: <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.returnValues)}</div> })}>
-                  <h2 className="card-title">Return values</h2>
-                  {cardData && <div className="card-content-text">{formatArgumentsOrReturnValues(cardData.returnValues)}</div>}
+                <div className="figma-card half-card clickable-card" onClick={() => toggleChunk('returnValues')}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <h2 className="card-title" style={{margin: 0}}>Return values</h2>
+                    <span style={{color: '#a0aec0', fontSize: '14px', transition: 'transform 0.3s', transform: collapsedChunks.returnValues ? 'rotate(-90deg)' : 'rotate(0)'}}>▼</span>
+                  </div>
+                  {!collapsedChunks.returnValues && cardData && <div className="card-content-text" style={{marginTop: '15px'}}>{formatArgumentsOrReturnValues(cardData.returnValues)}</div>}
                 </div>
               </div>
 
-              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'TO DO', content: parseTodoText(cardData.todo) })}>
-                <h2 className="card-title">TO DO</h2>
-                {cardData && parseTodoText(cardData.todo)}
+              <div className="figma-card full-card clickable-card" onClick={() => toggleChunk('todo')}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <h2 className="card-title" style={{margin: 0}}>TO DO</h2>
+                  <span style={{color: '#a0aec0', fontSize: '14px', transition: 'transform 0.3s', transform: collapsedChunks.todo ? 'rotate(-90deg)' : 'rotate(0)'}}>▼</span>
+                </div>
+                {!collapsedChunks.todo && cardData && <div style={{marginTop: '15px'}}>{parseTodoText(cardData.todo)}</div>}
               </div>
 
-              <div className="figma-card full-card clickable-card" onClick={() => cardData && setExpandedCard({ title: 'Tips', content: <div className="card-content-text">{renderTextWithInlineCode(cardData.tips)}</div> })}>
-                <h2 className="card-title">Tips</h2>
-                {cardData && <div className="card-content-text">{renderTextWithInlineCode(cardData.tips)}</div>}
+              <div className="figma-card full-card clickable-card" onClick={() => toggleChunk('tips')}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <h2 className="card-title" style={{margin: 0}}>Tips</h2>
+                  <span style={{color: '#a0aec0', fontSize: '14px', transition: 'transform 0.3s', transform: collapsedChunks.tips ? 'rotate(-90deg)' : 'rotate(0)'}}>▼</span>
+                </div>
+                {!collapsedChunks.tips && cardData && <div className="card-content-text" style={{marginTop: '15px'}}>{renderTextWithInlineCode(cardData.tips)}</div>}
               </div>
 
               <div className="review-workspace">
@@ -1154,25 +1262,25 @@ function App() {
                 
                 <div className="compact-card-content">
                   <div className="score-card-header">
-                    <h2 className="stats-title">Reveals this {selectedStat.label}</h2>
-                    <div className="score-range-controls" aria-label="Reveal code range">
+                    <h2 className="stats-title">Completions (No Reveal) this {selectedCompletionsStat.label}</h2>
+                    <div className="score-range-controls" aria-label="Completions range">
                       {STATS_OPTIONS.map(option => (
                         <button
                           key={option.key}
                           type="button"
-                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
-                          onClick={() => setStatsRange(option.key)}
+                          className={`score-range-btn ${completionsRange === option.key ? "active" : ""}`}
+                          onClick={() => setCompletionsRange(option.key)}
                           aria-label={option.label}
-                          aria-pressed={statsRange === option.key}
+                          aria-pressed={completionsRange === option.key}
                         >
                           {option.key}
                         </button>
                       ))}
                     </div>
                   </div>
-                  <div className="stats-value">{totalReveals}</div>
-                  <div className={`reveal-status-text ${totalReveals <= 3 ? 'good' : totalReveals <= 4 ? 'average' : 'bad'}`}>
-                    {totalReveals <= 3 ? "Great! Below average" : totalReveals <= 4 ? "Average level" : "Too high! Try solving yourself"}
+                  <div className="stats-value">{completionsCount}</div>
+                  <div className={`reveal-status-text ${completionsCount >= 5 ? 'good' : completionsCount >= 2 ? 'average' : 'bad'}`}>
+                    {completionsCount >= 5 ? "Excellent! You are solving tasks on your own!" : completionsCount >= 2 ? "Good job! Keep solving without code reveals." : "Try to complete more tasks without revealing code."}
                   </div>
                 </div>
               </div>
@@ -1189,10 +1297,10 @@ function App() {
                         <button
                           key={option.key}
                           type="button"
-                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
-                          onClick={() => setStatsRange(option.key)}
+                          className={`score-range-btn ${scoreRange === option.key ? "active" : ""}`}
+                          onClick={() => setScoreRange(option.key)}
                           aria-label={option.label}
-                          aria-pressed={statsRange === option.key}
+                          aria-pressed={scoreRange === option.key}
                         >
                           {option.key}
                         </button>
@@ -1204,32 +1312,44 @@ function App() {
                     <div
                       className="score-chart"
                       style={{
-                        "--red": `${redPercent}%`,
-                        "--yellow": `${yellowPercent}%`,
+                        "--unacceptable": `${unacceptablePercent}%`,
+                        "--poor": `${poorPercent}%`,
+                        "--fair": `${fairPercent}%`,
+                        "--good": `${goodPercent}%`,
                       }}
-                      aria-label={`Bad ${redPercent}%, mid ${yellowPercent}%, good ${greenPercent}%`}
+                      aria-label={`Unacceptable ${unacceptablePercent}%, Poor ${poorPercent}%, Fair ${fairPercent}%, Good ${goodPercent}%, Excellent ${excellentPercent}%`}
                     >
                       <div className="score-chart-center">
                         <span>{ratingTotal}</span>
-                        <small>{selectedStat.label}</small>
+                        <small>{selectedScoreStat.label}</small>
                       </div>
                     </div>
 
                     <div className="score-scale">
-                      <div className="score-scale-item bad">
+                      <div className="score-scale-item unacceptable">
                         <span></span>
-                        <strong>{selectedRatings.red}</strong>
-                        <small>Bad</small>
+                        <strong>{selectedRatings.unacceptable || 0}</strong>
+                        <small>Unacceptable</small>
                       </div>
-                      <div className="score-scale-item mid">
+                      <div className="score-scale-item poor">
                         <span></span>
-                        <strong>{selectedRatings.yellow}</strong>
-                        <small>Mid</small>
+                        <strong>{selectedRatings.poor || 0}</strong>
+                        <small>Poor</small>
+                      </div>
+                      <div className="score-scale-item fair">
+                        <span></span>
+                        <strong>{selectedRatings.fair || 0}</strong>
+                        <small>Fair</small>
                       </div>
                       <div className="score-scale-item good">
                         <span></span>
-                        <strong>{selectedRatings.green}</strong>
+                        <strong>{selectedRatings.good || 0}</strong>
                         <small>Good</small>
+                      </div>
+                      <div className="score-scale-item excellent">
+                        <span></span>
+                        <strong>{selectedRatings.excellent || 0}</strong>
+                        <small>Excellent</small>
                       </div>
                     </div>
                   </div>
@@ -1241,17 +1361,17 @@ function App() {
                 <div className="bar-card-content">
                   <div className="score-card-header">
                     <div>
-                      <h2 className="score-title">Reveals history</h2>
+                      <h2 className="score-title">No-Reveal completions history</h2>
                     </div>
-                    <div className="score-range-controls" aria-label="Reveal history range">
+                    <div className="score-range-controls" aria-label="Completions history range">
                       {STATS_OPTIONS.map(option => (
                         <button
                           key={option.key}
                           type="button"
-                          className={`score-range-btn ${statsRange === option.key ? "active" : ""}`}
-                          onClick={() => setStatsRange(option.key)}
+                          className={`score-range-btn ${historyRange === option.key ? "active" : ""}`}
+                          onClick={() => setHistoryRange(option.key)}
                           aria-label={option.label}
-                          aria-pressed={statsRange === option.key}
+                          aria-pressed={historyRange === option.key}
                         >
                           {option.key}
                         </button>
@@ -1265,8 +1385,8 @@ function App() {
                         <span key={`${value}-${index}`}>{value}</span>
                       ))}
                     </div>
-                    <div className={`bar-chart range-${statsRange.toLowerCase()}`}>
-                      {selectedHistory.map(item => (
+                    <div className={`bar-chart range-${historyRange.toLowerCase()}`}>
+                      {historyData.map(item => (
                         <div className="bar-item" key={item.label}>
                           <div className="bar-value">{item.value}</div>
                           <div className="bar-track">
@@ -1340,6 +1460,58 @@ function App() {
             <h2 className="modal-title">{expandedCard.title}</h2>
             <div className="modal-body">
               {expandedCard.content}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmRevealModal && (
+        <div className="modal-overlay" onClick={() => setShowConfirmRevealModal(false)} style={{zIndex: 9999}}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{maxWidth: '400px', textAlign: 'center', padding: '30px', background: '#1e1e2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px'}}>
+            <h2 className="modal-title" style={{marginBottom: '15px', fontSize: '20px', fontWeight: 'bold', color: '#fff', borderBottom: 'none'}}>Reveal AI Code?</h2>
+            <div className="modal-body" style={{marginBottom: '25px', color: '#a0aec0', fontSize: '15px', lineHeight: '1.5'}}>
+              Are you sure you want to reveal the AI code? Try to solve it yourself first!
+            </div>
+            <div style={{display: 'flex', gap: '12px', justifyContent: 'center'}}>
+              <button 
+                onClick={() => setShowConfirmRevealModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px', 
+                  borderRadius: '10px', 
+                  border: '1px solid rgba(255,255,255,0.1)', 
+                  background: 'rgba(255,255,255,0.05)', 
+                  color: '#fff', 
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255,255,255,0.1)'}
+                onMouseLeave={(e) => e.target.style.background = 'rgba(255,255,255,0.05)'}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmReveal}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px', 
+                  borderRadius: '10px', 
+                  border: 'none', 
+                  background: '#ff4d4f', 
+                  color: '#fff', 
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 12px rgba(255, 77, 79, 0.3)',
+                  transition: 'background 0.2s, transform 0.1s'
+                }}
+                onMouseEnter={(e) => e.target.style.background = '#ff7875'}
+                onMouseLeave={(e) => e.target.style.background = '#ff4d4f'}
+                onMouseDown={(e) => e.target.style.transform = 'scale(0.98)'}
+                onMouseUp={(e) => e.target.style.transform = 'scale(1)'}
+              >
+                Reveal Code
+              </button>
             </div>
           </div>
         </div>
